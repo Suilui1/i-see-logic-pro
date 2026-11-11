@@ -1,6 +1,7 @@
 // Light theme for Logic Pro, loaded with DYLD_INSERT_LIBRARIES. Changes nothing on disk.
 // The launcher app stores surfaceMax and gamma in the SETTINGS_DOMAIN preferences.
-// The environment variables LP_SURFACE_MAX and LP_GAMMA override them.
+// The environment variables LP_SURFACE_MAX and LP_GAMMA override them. LP_TINT="r,g,b" tints
+// the mapped grays.
 // LP_OUT and LP_DELAY enable the render test.
 #import <AppKit/AppKit.h>
 #import <dlfcn.h>
@@ -60,6 +61,9 @@ static ImageRange plugInRanges[MAX_PLUG_IN_RANGES];
 static volatile int plugInRangeCount = 0;
 static double grayGamma = 0.75;
 static double surfaceMax = 1;
+// The color that multiplies each mapped gray. White gives no tint.
+static CGFloat tint[3] = { 1, 1, 1 };
+static BOOL isTinted = NO;
 static NSAppearance *trueAqua;
 static CGColorSpaceRef srgbSpace;
 static NSString *outDir;
@@ -156,6 +160,19 @@ static CGFloat mapGray(CGFloat white, CGFloat alpha) {
    return mapGrayLevel(white, surfaceMax, grayGamma);
 }
 
+/**
+ * Writes the tinted color of a mapped gray level. Dark levels get almost no tint, so text
+ * stays neutral.
+ *
+ * @param white CGFloat - the mapped gray level
+ * @param rgb CGFloat * - the three output components
+ */
+static void tintGray(CGFloat white, CGFloat *rgb) {
+   for (int i = 0; i < 3; i++) {
+      rgb[i] = white * tint[i];
+   }
+}
+
 static BOOL isGrayish(CGFloat r, CGFloat g, CGFloat b) {
    return (fmax(r, fmax(g, b)) - fmin(r, fmin(g, b))) < GRAY_SPREAD;
 }
@@ -249,7 +266,7 @@ static CGColorRef copyMappedColor(CGColorRef color, NSString *name) {
 
       if (isBrightVariant(name)) {
          if (spread < GRAY_SPREAD && surfaceMax < 1) {
-            CGFloat values[4] = { c[0] * surfaceMax, c[1] * surfaceMax, c[2] * surfaceMax, c[3] };
+            CGFloat values[4] = { c[0] * surfaceMax * tint[0], c[1] * surfaceMax * tint[1], c[2] * surfaceMax * tint[2], c[3] };
 
             mapped = CGColorCreate(srgbSpace, values);
          }
@@ -258,7 +275,9 @@ static CGColorRef copyMappedColor(CGColorRef color, NSString *name) {
 
          mapped = CGColorCreate(srgbSpace, values);
       } else if (fixedGray(name) >= 0) {
-         CGFloat values[4] = { fixedGray(name), fixedGray(name), fixedGray(name), c[3] };
+         CGFloat values[4] = { 0, 0, 0, c[3] };
+
+         tintGray(fixedGray(name), values);
 
          mapped = CGColorCreate(srgbSpace, values);
       } else if (isAccent(name)) {
@@ -278,8 +297,9 @@ static CGColorRef copyMappedColor(CGColorRef color, NSString *name) {
       } else if (spread < GRAY_SPREAD) {
          CGFloat white = mapGray(level, c[3]);
          CGFloat alpha = isTextLabel(name) ? pow(c[3], TEXT_ALPHA_GAMMA) : c[3];
-         CGFloat values[4] = { white, white, white, alpha };
+         CGFloat values[4] = { 0, 0, 0, alpha };
 
+         tintGray(white, values);
          mapped = CGColorCreate(srgbSpace, values);
       }
    }
@@ -338,9 +358,20 @@ static void hookAppSetAppearance(id app, SEL sel, NSAppearance *appearance) {
    ((void (*)(id, SEL, NSAppearance *))origAppSetAppearance)(app, sel, trueAqua);
 }
 
+static NSColor *tintedColor(id cls, CGFloat white, CGFloat alpha) {
+   CGFloat rgb[3];
+
+   tintGray(white, rgb);
+   return ((NSColor *(*)(id, SEL, CGFloat, CGFloat, CGFloat, CGFloat))origSRGB)(cls, @selector(colorWithSRGBRed:green:blue:alpha:), rgb[0], rgb[1], rgb[2], alpha);
+}
+
 #define WHITE_HOOK(fn, orig) \
    static NSColor *fn(id cls, SEL sel, CGFloat white, CGFloat alpha) { \
-      CGFloat mapped = isMappedCaller(__builtin_return_address(0)) ? mapGray(white, alpha) : white; \
+      BOOL isLogic = isMappedCaller(__builtin_return_address(0)); \
+      CGFloat mapped = isLogic ? mapGray(white, alpha) : white; \
+      if (isLogic && isTinted) { \
+         return tintedColor(cls, mapped, alpha); \
+      } \
       return ((NSColor *(*)(id, SEL, CGFloat, CGFloat))orig)(cls, sel, mapped, alpha); \
    }
 
@@ -348,7 +379,11 @@ static void hookAppSetAppearance(id app, SEL sel, NSAppearance *appearance) {
    static NSColor *fn(id cls, SEL sel, CGFloat r, CGFloat g, CGFloat b, CGFloat a) { \
       BOOL isMapped = (isGrayish(r, g, b) || isDarkenedLiteral(r, g, b)) && isMappedCaller(__builtin_return_address(0)); \
       if (isMapped && isGrayish(r, g, b)) { \
-         r = g = b = mapGray((r + g + b) / 3, a); \
+         CGFloat rgb[3]; \
+         tintGray(mapGray((r + g + b) / 3, a), rgb); \
+         r = rgb[0]; \
+         g = rgb[1]; \
+         b = rgb[2]; \
       } else if (isMapped) { \
          r *= ACCENT_DARKEN; \
          g *= ACCENT_DARKEN; \
@@ -360,6 +395,9 @@ static void hookAppSetAppearance(id app, SEL sel, NSAppearance *appearance) {
 #define NAMED_HOOK(fn, orig, white) \
    static NSColor *fn(id cls, SEL sel) { \
       if (isMappedCaller(__builtin_return_address(0))) { \
+         if (isTinted) { \
+            return tintedColor(cls, mapGray(white, 1), 1); \
+         } \
          return ((NSColor *(*)(id, SEL, CGFloat, CGFloat))origGenWhite)(cls, @selector(colorWithGenericGamma22White:alpha:), mapGray(white, 1), 1); \
       } \
       return ((NSColor *(*)(id, SEL))orig)(cls, sel); \
@@ -871,10 +909,12 @@ static void interposeLineDraw(CTLineRef line, CGContextRef ctx) {
       c = rgb && CGColorGetNumberOfComponents(rgb) == 4 ? CGColorGetComponents(rgb) : NULL;
    }
    if (c && isGrayish(c[0], c[1], c[2])) {
-      CGFloat white = mapGray((c[0] + c[1] + c[2]) / 3, c[3]);
-      CGFloat values[4] = { white, white, white, c[3] };
-      CGColorRef mapped = CGColorCreate(srgbSpace, values);
+      CGFloat values[4] = { 0, 0, 0, c[3] };
+      CGColorRef mapped;
       CGPoint end;
+
+      tintGray(mapGray((c[0] + c[1] + c[2]) / 3, c[3]), values);
+      mapped = CGColorCreate(srgbSpace, values);
 
       CGContextSaveGState(ctx);
       CGContextSetTextDrawingMode(ctx, kCGTextClip);
@@ -982,7 +1022,7 @@ typedef id __attribute__((ns_returns_retained)) (*CoderInit)(__attribute__((ns_c
  */
 static NSColor *mappedGrayColor(NSColor *color, CGFloat levelMax) {
    NSColor *rgb = color.type == NSColorTypeComponentBased ? [color colorUsingColorSpace:NSColorSpace.sRGBColorSpace] : nil;
-   CGFloat level, white;
+   CGFloat level, values[3];
 
    if (!rgb || !isGrayish(rgb.redComponent, rgb.greenComponent, rgb.blueComponent)) {
       return color;
@@ -991,8 +1031,8 @@ static NSColor *mappedGrayColor(NSColor *color, CGFloat levelMax) {
    if (level > levelMax) {
       return color;
    }
-   white = mapGray(level, rgb.alphaComponent);
-   return [NSColor colorWithSRGBRed:white green:white blue:white alpha:rgb.alphaComponent];
+   tintGray(mapGray(level, rgb.alphaComponent), values);
+   return [NSColor colorWithSRGBRed:values[0] green:values[1] blue:values[2] alpha:rgb.alphaComponent];
 }
 
 /**
@@ -1177,6 +1217,25 @@ static double readSetting(const char *envName, NSString *key, double fallback, d
 }
 
 /**
+ * Reads LP_TINT, three numbers from 0 to 1, and scales them so that the largest is 1.
+ */
+static void readTint(void) {
+   double r, g, b, top;
+
+   if (!getenv("LP_TINT") || sscanf(getenv("LP_TINT"), "%lf,%lf,%lf", &r, &g, &b) != 3) {
+      return;
+   }
+   top = fmax(r, fmax(g, b));
+   if (top <= 0) {
+      return;
+   }
+   tint[0] = fmax(0, r / top);
+   tint[1] = fmax(0, g / top);
+   tint[2] = fmax(0, b / top);
+   isTinted = tint[0] < 1 || tint[1] < 1 || tint[2] < 1;
+}
+
+/**
  * Adds the colors in the JSON output of assetutil and their appearances to a shared table.
  *
  * @param output NSData * - the output of assetutil --info
@@ -1285,6 +1344,7 @@ __attribute__((constructor)) static void start(void) {
    }
    grayGamma = readSetting("LP_GAMMA", @"gamma", grayGamma, GAMMA_MIN, GAMMA_MAX);
    surfaceMax = readSetting("LP_SURFACE_MAX", @"surfaceMax", surfaceMax, SURFACE_MAX_MIN, 1);
+   readTint();
    srgbSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
    singleAppearanceNames = listSingleAppearanceNames();
    trueAqua = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
@@ -1335,9 +1395,9 @@ __attribute__((constructor)) static void start(void) {
    toolbarOnColor = class_getInstanceVariable(objc_getClass("_TtC5Logic17ToolbarButtonCell"), "onColor");
    origToolbarImage = method_setImplementation(class_getInstanceMethod(objc_getClass("_TtC5Logic17ToolbarButtonCell"), @selector(drawImage:withFrame:inView:)), (IMP)hookToolbarImage);
    origButtonImage = method_setImplementation(class_getInstanceMethod([NSButtonCell class], @selector(drawImage:withFrame:inView:)), (IMP)hookButtonImage);
-   if (surfaceMax < 1) {
+   if (surfaceMax < 1 || isTinted) {
       origOrderWindow = method_setImplementation(class_getInstanceMethod([NSWindow class], @selector(orderWindow:relativeTo:)), (IMP)hookOrderWindow);
-      scaledControlBackground = [NSColor colorWithSRGBRed:surfaceMax green:surfaceMax blue:surfaceMax alpha:1];
+      scaledControlBackground = [NSColor colorWithSRGBRed:surfaceMax * tint[0] green:surfaceMax * tint[1] blue:surfaceMax * tint[2] alpha:1];
       origClipBackground = method_setImplementation(class_getInstanceMethod([NSClipView class], @selector(backgroundColor)), (IMP)hookClipBackground);
       if (objc_getClass("NSToolbarPlatterView")) {
          origPlatterLayout = method_setImplementation(class_getInstanceMethod(objc_getClass("NSToolbarPlatterView"), @selector(layout)), (IMP)hookPlatterLayout);
