@@ -58,13 +58,14 @@ The build writes `theme/light-theme.dylib` and copies it into `app/I See Logic P
 1. Quit Logic Pro.
 2. Open `I See Logic Pro.app`.
 3. Select a preset in the sidebar, or move the sliders.
-4. Click Start Logic Pro.
+4. Optional: click a tint swatch to give the grays a light color.
+5. Click Start Logic Pro.
 
 The app starts Logic Pro with the theme, and then it quits. The theme loads only at launch, so a change takes effect the next time that you start Logic Pro.
 
 The first launch with the theme takes about one second longer. The theme then reads the color names from your copy of Logic Pro and keeps them in a cache. The next launches use the cache.
 
-![The launcher app with the Soft preset](docs/launcher.png)
+![The launcher app with the Soft preset and the Cool tint](docs/launcher.png)
 
 The preview in the app shows some Logic Pro tracks with the current values. The app paints it with the same gray rule as the theme, so it is close to what Logic Pro shows. If Logic Pro is open or if Logic Pro changed after the build, the status line at the bottom tells you what to do.
 
@@ -86,10 +87,17 @@ The app has these controls:
 | --- | --- | --- |
 | Lightness | 0.65 to 1 | The lightest gray. A lower value gives a darker interface. |
 | Middle grays | 0.5 to 1.5 | The curve between dark and light grays. A higher value makes the middle grays darker. |
+| Tint | None and six tints | A light color on the grays. |
 
 The presets are Light (1 and 0.75), Soft (0.85 and 0.85) and Gray (0.68 and 1). If you move a slider, the app selects Custom and keeps your values. The app stores them, and the theme uses them each time that you start Logic Pro with the app or with `launch.sh`.
 
 Values below 0.65 are not allowed, because black text then becomes hard to read. At 0.65, black text on the lightest gray has a contrast of about 5.6:1.
+
+## Add a tint
+
+A tint gives the gray surfaces a light color. The tints are Cool, Mist, Sage, Sand, Rose and Lilac. Select None to keep the grays neutral. The tint works with each preset and with your own slider values.
+
+The theme multiplies each gray by the tint. Light surfaces get a visible color, and black text gets almost none, so the text stays easy to read. All tints are light, so the colors of Logic Pro, such as the red Record button and the track colors, stay clear. The swatches in the app show each color stronger than the theme, so that you can tell them apart. The preview shows the true color.
 
 ## Use from a terminal
 
@@ -105,16 +113,17 @@ To open projects at the same time, add their paths:
 theme/launch.sh ~/Music/Logic/MySong.logicx
 ```
 
-If Logic Pro is open, `launch.sh` stops and tells you to quit Logic Pro first. `launch.sh` uses the settings of the app. Two environment variables override them for one launch:
+If Logic Pro is open, `launch.sh` stops and tells you to quit Logic Pro first. `launch.sh` uses the settings of the app. Three environment variables override them for one launch:
 
 ```sh
-LP_SURFACE_MAX=0.85 LP_GAMMA=0.85 theme/launch.sh
+LP_SURFACE_MAX=0.85 LP_GAMMA=0.85 LP_TINT=0.9,0.94,1 theme/launch.sh
 ```
 
-`LP_SURFACE_MAX` is the lightness, and `LP_GAMMA` is the middle grays value. To change the stored settings without the app, use `defaults`:
+`LP_SURFACE_MAX` is the lightness, and `LP_GAMMA` is the middle grays value. `LP_TINT` is the tint as three numbers from 0 to 1 for red, green and blue. The theme scales them so that the largest is 1. To change the stored settings without the app, use `defaults`:
 
 ```sh
 defaults write io.github.karlingen.i-see-logic-pro surfaceMax -float 0.85
+defaults write io.github.karlingen.i-see-logic-pro tint -string 0.9,0.94,1
 ```
 
 ## After a Logic Pro update
@@ -138,6 +147,7 @@ An update can also change the internal functions that the theme uses. Each versi
 ## Known limits
 
 - Some text and controls stay dark or have low contrast. Examples are the automation inspector and the active Mute button in the Mixer.
+- With a tint, some images stay neutral gray, for example the wells of the volume sliders. The parts that macOS draws, such as the toolbar glass, also stay gray.
 - The theme depends on internal parts of Logic Pro. An update can make parts of the interface dark again.
 - Logic Pro loads the library because Logic Pro 13 allows `DYLD_INSERT_LIBRARIES`. If a future version blocks it, the theme stops working.
 

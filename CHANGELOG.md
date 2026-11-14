@@ -2,6 +2,17 @@
 
 This file lists the changes in each release of I See Logic Pro. The newest release is first.
 
+## 1.1.0 (2026-11-14)
+
+### Added
+
+- A tint row in the app. It has None and six light tints: Cool, Mist, Sage, Sand, Rose and Lilac. The tint gives the gray surfaces a light color, and text stays black. The preview and the preset squares show the tint.
+- The `LP_TINT` environment variable sets a tint for one launch with `theme/launch.sh`.
+
+### Fixed
+
+- The Dark and Light labels beside the sliders looked disabled. They are now normal gray text, and the two sliders have the same length.
+
 ## 1.0.3 (2026-11-14)
 
 ### Fixed
