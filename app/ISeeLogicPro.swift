@@ -19,6 +19,7 @@ let RULER_HEIGHT = 20.0
 let BAR_WIDTH = 46.0
 let BAR_COUNT = 12
 let STRIP_FOOTER = 14.0
+let END_LABEL_WIDTH = 30.0
 let SWATCH_SIZE = 18.0
 let SWATCH_RING = 3.0
 // The swatches show each tint this many times stronger than the theme, so that the hues are
@@ -418,15 +419,20 @@ struct ContentView: View {
       high: String, shown: String) -> some View {
       return GridRow {
          Text(label)
-         Slider(value: value, in: range) {
-            Text(label)
-         } minimumValueLabel: {
+         // The end labels are plain text, because macOS draws the value labels of a Slider dimmed.
+         HStack(spacing: 8) {
             Text(low).font(.caption).foregroundStyle(.secondary)
-         } maximumValueLabel: {
+               .frame(width: END_LABEL_WIDTH, alignment: .trailing)
+               .accessibilityHidden(true)
+            Slider(value: value, in: range) {
+               Text(label)
+            }
+            .labelsHidden()
+            .accessibilityValue(shown)
             Text(high).font(.caption).foregroundStyle(.secondary)
+               .frame(width: END_LABEL_WIDTH, alignment: .leading)
+               .accessibilityHidden(true)
          }
-         .labelsHidden()
-         .accessibilityValue(shown)
          Text(shown).monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
       }
    }
