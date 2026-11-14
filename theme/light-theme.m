@@ -14,6 +14,7 @@
 #define MAX_RANGES 256
 #define ADDRESS_MASK 0x0000ffffffffffffULL
 #define MAX_STACK_FRAMES 128
+#define MAX_PLUG_IN_RANGES 4
 #define GRAY_SPREAD 0.12
 #define SHADOW_LIMIT 0.1
 #define TINT_SPREAD 0.2
@@ -53,6 +54,10 @@ typedef enum { STYLE_PLAIN, STYLE_SLOT, STYLE_WELL, STYLE_KNOB, STYLE_THUMB, STY
 
 static ImageRange logicRanges[MAX_RANGES];
 static volatile int logicRangeCount = 0;
+// The plug-in interface frameworks. Plug-in displays draw on their own dark background, so
+// their colors stay stock.
+static ImageRange plugInRanges[MAX_PLUG_IN_RANGES];
+static volatile int plugInRangeCount = 0;
 static double grayGamma = 0.75;
 static double surfaceMax = 1;
 static NSAppearance *trueAqua;
@@ -81,8 +86,16 @@ static void addImage(const struct mach_header *header, intptr_t slide) {
       const struct segment_command_64 *seg = (const void *)cmd;
 
       if (cmd->cmd == LC_SEGMENT_64 && strcmp(seg->segname, "__TEXT") == 0) {
-         logicRanges[logicRangeCount] = (ImageRange){ (uintptr_t)header, (uintptr_t)header + seg->vmsize };
-         logicRangeCount += 1;
+         ImageRange range = { (uintptr_t)header, (uintptr_t)header + seg->vmsize };
+         BOOL isPlugIn = strstr(info.dli_fname, "/MAPlugInGUI") || strstr(info.dli_fname, "/MAVectorUIKit.framework/");
+
+         if (isPlugIn && plugInRangeCount < MAX_PLUG_IN_RANGES) {
+            plugInRanges[plugInRangeCount] = range;
+            plugInRangeCount += 1;
+         } else if (!isPlugIn) {
+            logicRanges[logicRangeCount] = range;
+            logicRangeCount += 1;
+         }
          return;
       }
       cmd = (const void *)((const char *)cmd + cmd->cmdsize);
@@ -99,6 +112,34 @@ static BOOL isLogicCaller(void *address) {
       }
    }
    return NO;
+}
+
+/**
+ * Tells if plug-in interface code is on the call stack. Plug-ins also get colors through
+ * shared Logic frameworks, for example asset sets in MACore, so the direct caller is not enough.
+ *
+ * @return BOOL - YES if a frame is inside a plug-in interface framework
+ */
+static BOOL isPlugInStack(void) {
+   void *frames[MAX_STACK_FRAMES];
+   int depth = backtrace(frames, MAX_STACK_FRAMES);
+
+   for (int i = 0; i < depth; i++) {
+      uintptr_t pc = (uintptr_t)frames[i] & ADDRESS_MASK;
+
+      for (int j = 0; j < plugInRangeCount; j++) {
+         if (pc >= plugInRanges[j].start && pc < plugInRanges[j].end) {
+            return YES;
+         }
+      }
+   }
+   return NO;
+}
+
+// ponytail: one stack walk per color request from Logic (under 1 us at 100 frames), cache by
+// caller address if it shows in a profile
+static BOOL isMappedCaller(void *address) {
+   return isLogicCaller(address) && !isPlugInStack();
 }
 
 /**
@@ -299,15 +340,16 @@ static void hookAppSetAppearance(id app, SEL sel, NSAppearance *appearance) {
 
 #define WHITE_HOOK(fn, orig) \
    static NSColor *fn(id cls, SEL sel, CGFloat white, CGFloat alpha) { \
-      CGFloat mapped = isLogicCaller(__builtin_return_address(0)) ? mapGray(white, alpha) : white; \
+      CGFloat mapped = isMappedCaller(__builtin_return_address(0)) ? mapGray(white, alpha) : white; \
       return ((NSColor *(*)(id, SEL, CGFloat, CGFloat))orig)(cls, sel, mapped, alpha); \
    }
 
 #define RGB_HOOK(fn, orig) \
    static NSColor *fn(id cls, SEL sel, CGFloat r, CGFloat g, CGFloat b, CGFloat a) { \
-      if (isLogicCaller(__builtin_return_address(0)) && isGrayish(r, g, b)) { \
+      BOOL isMapped = (isGrayish(r, g, b) || isDarkenedLiteral(r, g, b)) && isMappedCaller(__builtin_return_address(0)); \
+      if (isMapped && isGrayish(r, g, b)) { \
          r = g = b = mapGray((r + g + b) / 3, a); \
-      } else if (isLogicCaller(__builtin_return_address(0)) && isDarkenedLiteral(r, g, b)) { \
+      } else if (isMapped) { \
          r *= ACCENT_DARKEN; \
          g *= ACCENT_DARKEN; \
          b *= ACCENT_DARKEN; \
@@ -317,7 +359,7 @@ static void hookAppSetAppearance(id app, SEL sel, NSAppearance *appearance) {
 
 #define NAMED_HOOK(fn, orig, white) \
    static NSColor *fn(id cls, SEL sel) { \
-      if (isLogicCaller(__builtin_return_address(0))) { \
+      if (isMappedCaller(__builtin_return_address(0))) { \
          return ((NSColor *(*)(id, SEL, CGFloat, CGFloat))origGenWhite)(cls, @selector(colorWithGenericGamma22White:alpha:), mapGray(white, 1), 1); \
       } \
       return ((NSColor *(*)(id, SEL))orig)(cls, sel); \
