@@ -49,6 +49,15 @@ static void testSettings(void) {
    check(isClose(readSetting(name, key, 0.75, GAMMA_MIN, GAMMA_MAX), 0.75), "the fallback is used");
 }
 
+static void testTint(void) {
+   parseTint("0.45,0.475,0.5");
+   check(isTinted && isClose(tint[0], 0.9) && isClose(tint[2], 1), "a tint is scaled so the largest part is 1");
+   parseTint("not a tint");
+   check(isTinted && isClose(tint[0], 0.9), "a bad tint leaves the tint as it is");
+   parseTint("0.5,0.5,0.5");
+   check(!isTinted, "a gray tint is no tint");
+}
+
 static void testFieldColors(void) {
    NSColor *dark = [NSColor colorWithSRGBRed:0.2 green:0.2 blue:0.2 alpha:1];
    NSColor *light = [NSColor colorWithSRGBRed:0.9 green:0.9 blue:0.9 alpha:1];
@@ -83,6 +92,7 @@ int main(void) {
    @autoreleasepool {
       testGrayRule();
       testSettings();
+      testTint();
       testFieldColors();
       testColorList();
    }

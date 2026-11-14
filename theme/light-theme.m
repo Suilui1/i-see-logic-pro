@@ -1,7 +1,7 @@
 // Light theme for Logic Pro, loaded with DYLD_INSERT_LIBRARIES. Changes nothing on disk.
-// The launcher app stores surfaceMax and gamma in the SETTINGS_DOMAIN preferences.
-// The environment variables LP_SURFACE_MAX and LP_GAMMA override them. LP_TINT="r,g,b" tints
-// the mapped grays.
+// The launcher app stores surfaceMax, gamma and tint in the SETTINGS_DOMAIN preferences.
+// The environment variables LP_SURFACE_MAX, LP_GAMMA and LP_TINT override them. A tint is
+// "r,g,b", and it multiplies the mapped grays.
 // LP_OUT and LP_DELAY enable the render test.
 #import <AppKit/AppKit.h>
 #import <dlfcn.h>
@@ -1217,12 +1217,15 @@ static double readSetting(const char *envName, NSString *key, double fallback, d
 }
 
 /**
- * Reads LP_TINT, three numbers from 0 to 1, and scales them so that the largest is 1.
+ * Sets the tint from three numbers from 0 to 1, "r,g,b", and scales them so that the largest
+ * is 1. A text that is not three numbers leaves the tint as it is.
+ *
+ * @param text const char * - the tint, or NULL
  */
-static void readTint(void) {
+static void parseTint(const char *text) {
    double r, g, b, top;
 
-   if (!getenv("LP_TINT") || sscanf(getenv("LP_TINT"), "%lf,%lf,%lf", &r, &g, &b) != 3) {
+   if (!text || sscanf(text, "%lf,%lf,%lf", &r, &g, &b) != 3) {
       return;
    }
    top = fmax(r, fmax(g, b));
@@ -1233,6 +1236,13 @@ static void readTint(void) {
    tint[1] = fmax(0, g / top);
    tint[2] = fmax(0, b / top);
    isTinted = tint[0] < 1 || tint[1] < 1 || tint[2] < 1;
+}
+
+// LP_TINT wins over the tint that the launcher stores.
+static void readTint(void) {
+   NSString *stored = [[[NSUserDefaults alloc] initWithSuiteName:SETTINGS_DOMAIN] stringForKey:@"tint"];
+
+   parseTint(getenv("LP_TINT") ?: stored.UTF8String);
 }
 
 /**

@@ -1,5 +1,6 @@
-// Launcher for the light theme. It stores the brightness settings in its own preferences
-// domain, which theme/light-theme.m reads at launch, and starts Logic Pro with the theme.
+// Launcher for the light theme. It stores the brightness and tint settings in its own
+// preferences domain, which theme/light-theme.m reads at launch, and starts Logic Pro with the
+// theme.
 import AppKit
 import SwiftUI
 
@@ -18,6 +19,11 @@ let RULER_HEIGHT = 20.0
 let BAR_WIDTH = 46.0
 let BAR_COUNT = 12
 let STRIP_FOOTER = 14.0
+let SWATCH_SIZE = 18.0
+let SWATCH_RING = 3.0
+// The swatches show each tint this many times stronger than the theme, so that the hues are
+// easy to tell apart. The preview shows the true strength.
+let SWATCH_GAIN = 3.0
 
 // Stock Logic Pro grays of the track area, measured in a render of Logic Pro without the theme.
 let STOCK_ROW = 0.18
@@ -43,6 +49,29 @@ let PRESETS = [
    Preset(name: "Light", summary: "Full brightness", surfaceMax: 1, gamma: 0.75),
    Preset(name: "Soft", summary: "Dimmer grays", surfaceMax: 0.85, gamma: 0.85),
    Preset(name: "Gray", summary: "Middle gray", surfaceMax: 0.68, gamma: 1),
+]
+
+// A tint multiplies each themed gray. The largest part is 1, and the others are at least 0.88,
+// so that black text stays neutral and Logic Pro colors such as record red stay clear.
+struct Tint: Identifiable {
+   let name: String
+   let red: Double
+   let green: Double
+   let blue: Double
+   var id: String { return name }
+   // The format that the theme reads, "r,g,b".
+   var stored: String { return "\(red),\(green),\(blue)" }
+}
+
+let NO_TINT = Tint(name: "None", red: 1, green: 1, blue: 1)
+let TINTS = [
+   NO_TINT,
+   Tint(name: "Cool", red: 0.9, green: 0.94, blue: 1),
+   Tint(name: "Mist", red: 0.89, green: 0.99, blue: 1),
+   Tint(name: "Sage", red: 0.91, green: 1, blue: 0.91),
+   Tint(name: "Sand", red: 1, green: 0.96, blue: 0.88),
+   Tint(name: "Rose", red: 1, green: 0.91, blue: 0.93),
+   Tint(name: "Lilac", red: 0.95, green: 0.91, blue: 1),
 ]
 
 struct MockTrack: Identifiable {
@@ -73,9 +102,15 @@ let MOCK_TRACKS = [
 struct ThemeValues {
    let surfaceMax: Double
    let gamma: Double
+   let tint: Tint
 
    func gray(_ stock: Double) -> Color {
-      return Color(white: mapGrayLevel(stock, surfaceMax, gamma))
+      return tinted(mapGrayLevel(stock, surfaceMax, gamma))
+   }
+
+   // A themed gray level with the tint, as the theme draws it.
+   func tinted(_ white: Double) -> Color {
+      return Color(red: white * tint.red, green: white * tint.green, blue: white * tint.blue)
    }
 }
 
@@ -218,7 +253,7 @@ struct MockStrip: View {
    func header(_ track: MockTrack) -> some View {
       let isSelected = track.number == 1
       let rowColor = isSelected
-         ? Color(white: SELECTED_ROW_WHITE * theme.surfaceMax)
+         ? theme.tinted(SELECTED_ROW_WHITE * theme.surfaceMax)
          : theme.gray(STOCK_ROW)
 
       return HStack(spacing: 6) {
@@ -286,6 +321,7 @@ struct MockStrip: View {
 struct ContentView: View {
    @AppStorage("surfaceMax") var surfaceMax = 1.0
    @AppStorage("gamma") var gamma = 0.75
+   @AppStorage("tint") var storedTint = NO_TINT.stored
    @State var status = getLaunchStatus()
    @State var columns = NavigationSplitViewVisibility.all
 
@@ -295,6 +331,14 @@ struct ContentView: View {
       }
 
       return match?.name ?? CUSTOM
+   }
+
+   var tint: Tint {
+      return TINTS.first { (t) in return t.stored == storedTint } ?? NO_TINT
+   }
+
+   var theme: ThemeValues {
+      return ThemeValues(surfaceMax: surfaceMax, gamma: gamma, tint: tint)
    }
 
    var selection: Binding<String?> {
@@ -323,14 +367,15 @@ struct ContentView: View {
          .toolbar(removing: .sidebarToggle)
       } detail: {
          VStack(alignment: .leading, spacing: 18) {
-            MockStrip(theme: ThemeValues(surfaceMax: surfaceMax, gamma: gamma))
+            MockStrip(theme: theme)
                .accessibilityElement(children: .ignore)
-               .accessibilityLabel("Preview of Logic Pro tracks at \(percent(surfaceMax)) lightness")
+               .accessibilityLabel("Preview of Logic Pro tracks at \(percent(surfaceMax)) lightness, tint \(tint.name)")
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 12) {
                sliderRow("Lightness", value: $surfaceMax, range: SURFACE_RANGE, low: "Dark", high: "Light",
                   shown: percent(surfaceMax))
                sliderRow("Middle grays", value: $gamma, range: GAMMA_RANGE, low: "Light", high: "Dark",
                   shown: String(format: "%.2f", gamma))
+               tintRow
             }
             Spacer(minLength: 0)
             HStack(spacing: 8) {
@@ -358,7 +403,7 @@ struct ContentView: View {
    func presetRow(name: String, summary: String, surface: Double) -> some View {
       return HStack(spacing: 10) {
          RoundedRectangle(cornerRadius: 4)
-            .fill(Color(white: surface))
+            .fill(theme.tinted(surface))
             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.separator))
             .frame(width: 18, height: 18)
          VStack(alignment: .leading, spacing: 1) {
@@ -384,6 +429,51 @@ struct ContentView: View {
          .accessibilityValue(shown)
          Text(shown).monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
       }
+   }
+
+   var tintRow: some View {
+      return GridRow {
+         Text("Tint")
+         HStack(spacing: 6) {
+            ForEach(TINTS) { (t) in
+               swatch(t)
+            }
+         }
+         .accessibilityElement(children: .contain)
+         .accessibilityLabel("Tint")
+         Text(tint.name).foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
+      }
+   }
+
+   func swatch(_ t: Tint) -> some View {
+      let isSelected = t.id == tint.id
+      let fill = Color(red: 1 - (1 - t.red) * SWATCH_GAIN, green: 1 - (1 - t.green) * SWATCH_GAIN,
+         blue: 1 - (1 - t.blue) * SWATCH_GAIN)
+
+      return Button {
+         storedTint = t.stored
+      } label: {
+         ZStack {
+            Circle().fill(fill)
+            if t.id == NO_TINT.id {
+               // A slash marks the swatch that removes the tint.
+               Path { (path) in
+                  path.move(to: CGPoint(x: SWATCH_SIZE * 0.25, y: SWATCH_SIZE * 0.75))
+                  path.addLine(to: CGPoint(x: SWATCH_SIZE * 0.75, y: SWATCH_SIZE * 0.25))
+               }
+               .stroke(.secondary, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            }
+            Circle().strokeBorder(.black.opacity(0.15), lineWidth: 0.5)
+         }
+         .frame(width: SWATCH_SIZE, height: SWATCH_SIZE)
+         .padding(SWATCH_RING)
+         .overlay(Circle().strokeBorder(Color.accentColor, lineWidth: 2).opacity(isSelected ? 1 : 0))
+         .contentShape(Circle())
+      }
+      .buttonStyle(.plain)
+      .help(t.name)
+      .accessibilityLabel(t.name)
+      .accessibilityAddTraits(isSelected ? .isSelected : [])
    }
 
    func percent(_ value: Double) -> String {
