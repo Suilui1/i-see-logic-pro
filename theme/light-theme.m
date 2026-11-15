@@ -24,6 +24,8 @@
 #define WELL_FADE 0.35
 #define NOTE_TEXT_MIN 0.5
 #define ACCENT_DARKEN 0.4
+// Colored text darkens more at the darker settings, so that it keeps its contrast.
+#define ACCENT_SURFACE_POWER 1.5
 #define COLOR_MATCH 0.005
 #define PLAYHEAD_WHITE 0.3
 #define REGION_OUTLINE_DARKEN 0.65
@@ -62,6 +64,7 @@ static ImageRange plugInRanges[MAX_PLUG_IN_RANGES];
 static volatile int plugInRangeCount = 0;
 static double grayGamma = 0.75;
 static double surfaceMax = 1;
+static double accentDarken = ACCENT_DARKEN;
 // The color that multiplies each mapped gray. White gives no tint.
 static CGFloat tint[3] = { 1, 1, 1 };
 static BOOL isTinted = NO;
@@ -293,7 +296,7 @@ static CGColorRef copyMappedColor(CGColorRef color, NSString *name) {
 
          mapped = CGColorCreate(srgbSpace, values);
       } else if (isAccent(name)) {
-         CGFloat values[4] = { c[0] * ACCENT_DARKEN, c[1] * ACCENT_DARKEN, c[2] * ACCENT_DARKEN, c[3] };
+         CGFloat values[4] = { c[0] * accentDarken, c[1] * accentDarken, c[2] * accentDarken, c[3] };
 
          mapped = CGColorCreate(srgbSpace, values);
       } else if (isWell(name)) {
@@ -307,9 +310,10 @@ static CGColorRef copyMappedColor(CGColorRef color, NSString *name) {
 
          mapped = CGColorCreate(srgbSpace, values);
       } else if (spread < GRAY_SPREAD) {
-         CGFloat white = mapGray(level, c[3]);
-         CGFloat alpha = isTextLabel(name) ? pow(c[3], TEXT_ALPHA_GAMMA) : c[3];
-         CGFloat values[4] = { 0, 0, 0, alpha };
+         BOOL isText = isTextLabel(name) && level >= FOREGROUND_MIN;
+         CGFloat white = isText ? mapTextLevel(level, surfaceMax, grayGamma) : mapGray(level, c[3]);
+         CGFloat labelAlpha = isTextLabel(name) ? pow(c[3], TEXT_ALPHA_GAMMA) : c[3];
+         CGFloat values[4] = { 0, 0, 0, isText ? mapTextAlpha(level, labelAlpha, surfaceMax, grayGamma) : labelAlpha };
 
          tintGray(white, values);
          mapped = CGColorCreate(srgbSpace, values);
@@ -397,9 +401,9 @@ static NSColor *tintedColor(id cls, CGFloat white, CGFloat alpha) {
          g = rgb[1]; \
          b = rgb[2]; \
       } else if (isMapped) { \
-         r *= ACCENT_DARKEN; \
-         g *= ACCENT_DARKEN; \
-         b *= ACCENT_DARKEN; \
+         r *= accentDarken; \
+         g *= accentDarken; \
+         b *= accentDarken; \
       } \
       return ((NSColor *(*)(id, SEL, CGFloat, CGFloat, CGFloat, CGFloat))orig)(cls, sel, r, g, b, a); \
    }
@@ -1371,6 +1375,7 @@ __attribute__((constructor)) static void start(void) {
    }
    grayGamma = readSetting("LP_GAMMA", @"gamma", grayGamma, GAMMA_MIN, GAMMA_MAX);
    surfaceMax = readSetting("LP_SURFACE_MAX", @"surfaceMax", surfaceMax, SURFACE_MAX_MIN, 1);
+   accentDarken = ACCENT_DARKEN * pow(surfaceMax, ACCENT_SURFACE_POWER);
    readTint();
    srgbSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
    singleAppearanceNames = listSingleAppearanceNames();

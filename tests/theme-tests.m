@@ -35,6 +35,25 @@ static void testGrayRule(void) {
    check(isClose(mapGray(0.05, 0.5), 0.05), "a transparent near-black shadow does not change");
 }
 
+static double contrastOn(double text, double surface) {
+   return (toLinear(surface) + 0.05) / (toLinear(text) + 0.05);
+}
+
+static void testTextContrast(void) {
+   double grayButton = mapGrayLevel(STOCK_TEXT_BACKGROUND, 0.68, 1);
+   double lightButton = mapGrayLevel(STOCK_TEXT_BACKGROUND, 1, 0.75);
+
+   check(contrastOn(mapTextLevel(0.7, 0.68, 1), grayButton) >= TEXT_CONTRAST - 0.01, "secondary text keeps its contrast at Gray");
+   // At the darkest setting, even black cannot reach TEXT_CONTRAST on a button, so all text is black.
+   check(isClose(mapTextLevel(FOREGROUND_MIN, SURFACE_MAX_MIN, GAMMA_MAX), 0), "all text is black at the darkest setting");
+   check(contrastOn(mapTextLevel(0.7, 1, 0.75), lightButton) >= TEXT_CONTRAST - 0.01, "secondary text keeps its contrast at Light");
+   check(isClose(mapGrayLevel(0.7, 0.68, 1), 0.68 * 0.3), "a light gray that is not text keeps the curve");
+   check(mapTextAlpha(1, 0.35, 0.68, 1) > 0.8, "translucent text gets more opacity at Gray");
+   check(isClose(mapTextAlpha(1, 0.7, 1, 0.75), 0.7), "translucent text with enough contrast does not change");
+   check(isClose(mapTextAlpha(1, 0.1, 0.68, 1), 0.1), "a light overlay keeps its opacity");
+   check(isClose(mapTextAlpha(0.2, 0.5, 0.68, 1), 0.5), "a translucent surface gray keeps its opacity");
+}
+
 static void testSettings(void) {
    const char *name = "LP_TEST_SETTING";
    NSString *key = @"testKeyThatIsNeverStored";
@@ -91,6 +110,7 @@ static void testColorList(void) {
 int main(void) {
    @autoreleasepool {
       testGrayRule();
+      testTextContrast();
       testSettings();
       testTint();
       testFieldColors();
