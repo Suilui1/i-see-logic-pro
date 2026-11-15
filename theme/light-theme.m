@@ -43,6 +43,8 @@
 #define LOGIC_BUNDLE_ID @"com.apple.logic10"
 // The color list cache, one file for each Logic Pro build, below the home folder.
 #define COLOR_CACHE_DIR @"Library/Caches/io.github.karlingen.i-see-logic-pro"
+// Change this number when the rules for the color list change, so that old caches are not used.
+#define COLOR_LIST_VERSION 2
 #define ASSETUTIL_PATH @"/usr/bin/assetutil"
 #define FIELD_DARK_MAX 0.5
 #define PLATTER_ALPHA 0.35
@@ -55,8 +57,7 @@ typedef enum { STYLE_PLAIN, STYLE_SLOT, STYLE_WELL, STYLE_KNOB, STYLE_THUMB, STY
 
 static ImageRange logicRanges[MAX_RANGES];
 static volatile int logicRangeCount = 0;
-// The plug-in interface frameworks. Plug-in displays draw on their own dark background, so
-// their colors stay stock.
+// The plug-in interface frameworks, see isPlugInPath.
 static ImageRange plugInRanges[MAX_PLUG_IN_RANGES];
 static volatile int plugInRangeCount = 0;
 static double grayGamma = 0.75;
@@ -71,6 +72,17 @@ static int recoloredImages = 0;
 static uintptr_t regionDrawStart, regionDrawEnd;
 static ImageRange panKnobDraw, arrangeKnobDraw, trackHeaderDraw, textDraw, rulerMarkerDraw, threePartDraw;
 static CGColorRef (*fillColorOf)(CGContextRef);
+
+/**
+ * Tells if a path is inside a plug-in interface framework. Plug-in displays draw on their own
+ * dark background, so their colors stay stock.
+ *
+ * @param path const char * - a file path
+ * @return BOOL - YES for MAPlugInGUI, MAPlugInGUISwift and MAVectorUIKit
+ */
+static BOOL isPlugInPath(const char *path) {
+   return strstr(path, "/MAPlugInGUI") || strstr(path, "/MAVectorUIKit.framework/");
+}
 
 /**
  * Records the __TEXT range of images inside the Logic Pro bundle.
@@ -91,7 +103,7 @@ static void addImage(const struct mach_header *header, intptr_t slide) {
 
       if (cmd->cmd == LC_SEGMENT_64 && strcmp(seg->segname, "__TEXT") == 0) {
          ImageRange range = { (uintptr_t)header, (uintptr_t)header + seg->vmsize };
-         BOOL isPlugIn = strstr(info.dli_fname, "/MAPlugInGUI") || strstr(info.dli_fname, "/MAVectorUIKit.framework/");
+         BOOL isPlugIn = isPlugInPath(info.dli_fname);
 
          if (isPlugIn && plugInRangeCount < MAX_PLUG_IN_RANGES) {
             plugInRanges[plugInRangeCount] = range;
@@ -1310,7 +1322,7 @@ static NSSet<NSString *> *listSingleAppearanceNames(void) {
    NSString *contents = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"Contents"];
    NSString *build = NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"] ?: @"unknown";
    NSString *dir = [NSHomeDirectory() stringByAppendingPathComponent:COLOR_CACHE_DIR];
-   NSString *cache = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"logic-colors-%@.txt", build]];
+   NSString *cache = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"logic-colors-%d-%@.txt", COLOR_LIST_VERSION, build]];
    NSString *saved = [NSString stringWithContentsOfFile:cache encoding:NSUTF8StringEncoding error:nil];
    NSString *frameworks = [contents stringByAppendingPathComponent:@"Frameworks"];
    NSMutableArray<NSString *> *catalogs = [NSMutableArray arrayWithObject:[contents stringByAppendingPathComponent:@"Resources/Assets.car"]];
@@ -1322,6 +1334,11 @@ static NSSet<NSString *> *listSingleAppearanceNames(void) {
    }
    for (NSString *framework in [NSFileManager.defaultManager contentsOfDirectoryAtPath:frameworks error:nil]) {
       NSString *resources = [frameworks stringByAppendingPathComponent:[framework stringByAppendingPathComponent:@"Versions/A/Resources"]];
+
+      // Plug-in catalog colors stay stock, like the other plug-in colors.
+      if (isPlugInPath(resources.fileSystemRepresentation)) {
+         continue;
+      }
 
       for (NSString *file in [NSFileManager.defaultManager contentsOfDirectoryAtPath:resources error:nil]) {
          if ([file.pathExtension isEqual:@"car"]) {
