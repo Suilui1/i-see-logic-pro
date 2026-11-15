@@ -220,7 +220,7 @@ static IMP origCGColor, origAppearanceNamed, origAppSetAppearance;
 static IMP origTooltipLabel, origTooltipValue, origTooltipRightValue;
 static IMP origAdjustDarkText, origSetCaretColor, origSetTypingAttributes;
 static IMP origNibDecode, origAppearanceDecode, origHeaderDraw, origToolbarImage, origButtonImage;
-static IMP origOrderWindow, origClipBackground, origFieldBackground, origPlatterLayout;
+static IMP origOrderWindow, origClipBackground, origFieldBackground, origCellBackground, origPlatterLayout;
 static NSColor *scaledControlBackground;
 static Ivar toolbarOnColor;
 static Class notesTextView;
@@ -1085,6 +1085,20 @@ static void hookFieldBackground(NSTextField *field, SEL sel, NSColor *color) {
 }
 
 /**
+ * Maps the same literal gray when Logic also gives it to the cell of the field. The cell puts
+ * it behind each character in the field editor, so unselected text was black on dark gray.
+ *
+ * @param cell NSCell * - the MATextFieldCell
+ * @param sel SEL - the setNSBackgroundColor: selector
+ * @param color NSColor * - the new text background color
+ */
+static void hookCellBackground(NSCell *cell, SEL sel, NSColor *color) {
+   NSColor *mapped = isLogicCaller(__builtin_return_address(0)) ? mappedGrayColor(color, FIELD_DARK_MAX) : color;
+
+   ((void (*)(id, SEL, NSColor *))origCellBackground)(cell, sel, mapped);
+}
+
+/**
  * Maps a dark appearance that a nib stores. Decoding skips +[NSAppearance appearanceNamed:].
  *
  * @param appearance NSAppearance * - the object being decoded
@@ -1421,6 +1435,7 @@ __attribute__((constructor)) static void start(void) {
    origSetCaretColor = method_setImplementation(class_getInstanceMethod([NSTextView class], @selector(setInsertionPointColor:)), (IMP)hookSetCaretColor);
    origSetTypingAttributes = method_setImplementation(class_getInstanceMethod([NSTextView class], @selector(setTypingAttributes:)), (IMP)hookSetTypingAttributes);
    origFieldBackground = method_setImplementation(class_getInstanceMethod([NSTextField class], @selector(setBackgroundColor:)), (IMP)hookFieldBackground);
+   origCellBackground = method_setImplementation(class_getInstanceMethod(objc_getClass("MATextFieldCell"), NSSelectorFromString(@"setNSBackgroundColor:")), (IMP)hookCellBackground);
    origNibDecode = method_setImplementation(class_getInstanceMethod(objc_getClass("UINibDecoder"), @selector(decodeObjectForKey:)), (IMP)hookNibDecode);
    origAppearanceDecode = method_setImplementation(class_getInstanceMethod([NSAppearance class], @selector(initWithCoder:)), (IMP)hookAppearanceDecode);
    origHeaderDraw = method_setImplementation(class_getInstanceMethod([NSTableHeaderView class], @selector(drawRect:)), (IMP)hookHeaderDraw);

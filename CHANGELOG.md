@@ -2,6 +2,12 @@
 
 This file lists the changes in each release of I See Logic Pro. The newest release is first.
 
+## Unreleased
+
+### Fixed
+
+- When you rename a track, the name is readable. Before this fix, the text was black on a dark gray band. You saw it only in a selection.
+
 ## 1.1.1 (2026-11-15)
 
 ### Fixed
