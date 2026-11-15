@@ -2,6 +2,13 @@
 
 This file lists the changes in each release of I See Logic Pro. The newest release is first.
 
+## 1.1.1 (2026-11-15)
+
+### Fixed
+
+- Plug-in windows such as Mastering Assistant and Beat Breaker keep their stock colors. Before this fix, their panels were gray with faint text.
+- Text has more contrast at the Soft and Gray presets. For example, the Setting buttons and the green Read label in the Mixer are darker. Some small labels in the Mixer still have low contrast at the Gray preset.
+
 ## 1.1.0 (2026-11-14)
 
 ### Added
