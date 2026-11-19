@@ -7,9 +7,11 @@
 #import <dlfcn.h>
 #import <execinfo.h>
 #import <mach-o/dyld.h>
+#import <mach-o/getsect.h>
 #import <mach-o/loader.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <sys/mman.h>
 #import "gray-rule.h"
 
 #define MAX_RANGES 256
@@ -88,6 +90,32 @@ static BOOL isPlugInPath(const char *path) {
 }
 
 /**
+ * Points the ColorScheme.dark import of an image at ColorScheme.light. MAContentBrowserUI forces
+ * the dark scheme on its SwiftUI views, so the All Filters popover drew a dark material.
+ *
+ * @param header const struct mach_header * - the image to change
+ */
+static void rebindDarkScheme(const struct mach_header *header) {
+   const void *dark = dlsym(RTLD_DEFAULT, "$s7SwiftUI11ColorSchemeO4darkyA2CmFWC");
+   const void *light = dlsym(RTLD_DEFAULT, "$s7SwiftUI11ColorSchemeO5lightyA2CmFWC");
+   unsigned long size = 0;
+   const void **slots = (const void **)getsectiondata((const struct mach_header_64 *)header, "__DATA_CONST", "__got", &size);
+   long pageSize = sysconf(_SC_PAGESIZE);
+
+   if (!dark || !light || !slots) {
+      return;
+   }
+   for (unsigned long i = 0; i < size / sizeof(void *); i++) {
+      void *page = (void *)((uintptr_t)&slots[i] & ~(uintptr_t)(pageSize - 1));
+
+      if (slots[i] == dark && mprotect(page, pageSize, PROT_READ | PROT_WRITE) == 0) {
+         slots[i] = light;
+         mprotect(page, pageSize, PROT_READ);
+      }
+   }
+}
+
+/**
  * Records the __TEXT range of images inside the Logic Pro bundle.
  *
  * @param header const struct mach_header * - the image that was added
@@ -99,6 +127,9 @@ static void addImage(const struct mach_header *header, intptr_t slide) {
 
    if (!dladdr(header, &info) || !strstr(info.dli_fname, "/Logic Pro.app/") || logicRangeCount >= MAX_RANGES) {
       return;
+   }
+   if (strstr(info.dli_fname, "/MAContentBrowserUI.framework/")) {
+      rebindDarkScheme(header);
    }
 
    for (uint32_t i = 0; i < header->ncmds; i++) {
@@ -239,14 +270,20 @@ static BOOL isTextLabel(NSString *name) {
       || [name isEqualToString:@"MixerTypeAndNumberLabels"] || [name isEqualToString:@"MixerLevelNumbers"];
 }
 
-// These accents were chosen for dark surfaces. Peak values share the level meter colors.
+// These accents were chosen for dark surfaces. Peak values share the level meter colors. The
+// Browser tag text uses the bright Off colors, for example in the All Filters popover.
 static BOOL isAccent(NSString *name) {
-   return [@[ @"MixerAutomationReadOnDefault", @"MixerLevelmeterGreen", @"MixerLevelmeterYellow", @"MixerKnobFillPan", @"TextLabelRed", @"TextLabelRedLighter", @"PlayheadLineSolo", @"PlayheadLineScore" ] containsObject:name];
+   BOOL isTagText = [name hasPrefix:@"ContentBrowserTagColor"] && [name hasSuffix:@"Off"];
+
+   return isTagText || [@[ @"MixerAutomationReadOnDefault", @"MixerLevelmeterGreen", @"MixerLevelmeterYellow", @"MixerKnobFillPan", @"TextLabelRed", @"TextLabelRedLighter", @"PlayheadLineSolo", @"PlayheadLineScore" ] containsObject:name];
 }
 
 // Translucent black reads as a recess on a dark surface, and as a heavy block on a light one.
+// The Browser tag pills are translucent black too.
 static BOOL isWell(NSString *name) {
-   return [name hasPrefix:@"MixerContainer"] || [@[ @"MixerLevelmeterBackground", @"MixerFaderTrack", @"MixerKnobTrack", @"MixerSliderLevelValueReadout" ] containsObject:name];
+   BOOL isTagPlatter = [name hasPrefix:@"ContentBrowserTag"] && ([name containsString:@"Platter"] || [name hasSuffix:@"Applied"]);
+
+   return isTagPlatter || [name hasPrefix:@"MixerContainer"] || [@[ @"MixerLevelmeterBackground", @"MixerFaderTrack", @"MixerKnobTrack", @"MixerSliderLevelValueReadout" ] containsObject:name];
 }
 
 // The gray mapping makes the selected row darker than the rows around it, and the playhead black.

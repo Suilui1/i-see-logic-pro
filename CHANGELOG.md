@@ -7,6 +7,7 @@ This file lists the changes in each release of I See Logic Pro. The newest relea
 ### Fixed
 
 - When you rename a track, the name is readable. Before this fix, the text was black on a dark gray band. You saw it only in a selection.
+- The All Filters popover in the Browser is light. Before this fix, it was dark gray, with dark tags and bright tag text.
 
 ## 1.1.1 (2026-11-15)
 
