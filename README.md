@@ -108,6 +108,9 @@ The theme reads the Logic Pro 12 grays from Logic Pro 13 at each launch, because
 
 ![Logic Pro in the Classic mode of I See Logic Pro](docs/classic-theme.png)
 
+The contrast setting applies to the light theme. The Classic mode keeps the grays of
+Logic Pro 12 and leaves the text grays as they are, so the slider does nothing there.
+
 ## Starting Logic Pro without the theme
 
 The switch **No theme** under the preset list starts Logic Pro the plain way, without injecting

@@ -128,8 +128,9 @@ static void testContrastSetting(void) {
       "the darkest setting is never lighter");
    check(contrastOn(mapTextLevel(0.7, light, gamma, 9), mapGrayLevel(STOCK_TEXT_BACKGROUND, light, gamma)) >= 8.5,
       "the requested contrast is kept at Light");
-   check(isClose(mapTextLevel(0.7, light, 1.2, 12), 0) || mapTextLevel(0.7, light, 1.2, 12) < 0.1,
-      "a high contrast brings secondary text close to black");
+   // Measured from the rule: the text limit of the Light preset is 0.340 at 4.5 and 0.053 at 12.
+   check(isClose(textLimit(1, 0.75, 4.5), 0.340), "the text limit at 4.5 is 0.340");
+   check(isClose(textLimit(1, 0.75, 12), 0.053), "the text limit at 12 is 0.053");
 }
 
 int main(void) {

@@ -1330,11 +1330,12 @@ static void noteSkipped(const char *name, const char *selector) {
    instead of silent. With LP_DEBUG=1 it always speaks; otherwise only when a hook is missing. */
 static void reportStart(void) {
    if (hooksSkipped || getenv("LP_DEBUG")) {
-      NSLog(@"I See Logic Pro: Logic Pro %@ build %@, %d hooks, %d skipped, "
+      NSLog(@"I See Logic Pro: Logic Pro %@ build %@, %d hook%s, %d skipped, "
             @"lightness %.2f, middle grays %.2f, contrast %.1f, palette %@%s%s",
             NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"?",
             NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"] ?: @"?",
-            hooksInstalled, hooksSkipped, surfaceMax, grayGamma, textContrast,
+            hooksInstalled, hooksInstalled == 1 ? "" : "s", hooksSkipped,
+            surfaceMax, grayGamma, textContrast,
             isClassic ? @"classic" : @"light",
             hooksSkipped ? ": " : "",
             hooksSkipped ? skippedNames : "");
