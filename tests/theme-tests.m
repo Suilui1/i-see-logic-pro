@@ -107,6 +107,13 @@ static void testColorList(void) {
    check(appearances.count == 2, "bad output adds nothing");
 }
 
+static void testClassicRule(void) {
+   check(isClose(mapClassicLevel(0), 0), "black stays black in the classic mode");
+   check(isClose(mapClassicLevel(0.149), 0.341), "a track row gets the Logic Pro 12 gray");
+   check(isClose(mapClassicLevel(0.7), 0.7), "text grays do not change in the classic mode");
+   check(mapClassicLevel(0.1) > 0.1 && mapClassicLevel(0.1) < mapClassicLevel(0.2), "the classic curve lifts and keeps the order");
+}
+
 int main(void) {
    @autoreleasepool {
       testGrayRule();
@@ -115,6 +122,7 @@ int main(void) {
       testTint();
       testFieldColors();
       testColorList();
+      testClassicRule();
    }
    printf(failures ? "%d tests failed\n" : "All tests passed\n", failures);
    return failures ? 1 : 0;

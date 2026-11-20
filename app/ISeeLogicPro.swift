@@ -11,6 +11,10 @@ let SURFACE_RANGE = SURFACE_MAX_MIN...1.0
 let GAMMA_RANGE = GAMMA_MIN...GAMMA_MAX
 let PRESET_MATCH = 0.005
 let CUSTOM = "Custom"
+let CLASSIC = "Classic"
+// The Logic Pro 12 grays of a track row and a selected track row, which the classic mode uses.
+let CLASSIC_ROW = 0.341
+let CLASSIC_SELECTED_ROW = 0.45
 let WINDOW_SIZE = CGSize(width: 720, height: 400)
 let SIDEBAR_WIDTH = 190.0
 let HEADER_WIDTH = 290.0
@@ -104,13 +108,22 @@ struct ThemeValues {
    let surfaceMax: Double
    let gamma: Double
    let tint: Tint
+   // The classic mode keeps Logic Pro dark, without the sliders and the tint.
+   let isClassic: Bool
+
+   var selectedRow: Color {
+      return isClassic ? tinted(CLASSIC_SELECTED_ROW) : tinted(SELECTED_ROW_WHITE * surfaceMax)
+   }
 
    func gray(_ stock: Double) -> Color {
-      return tinted(mapGrayLevel(stock, surfaceMax, gamma))
+      return tinted(isClassic ? mapClassicLevel(stock) : mapGrayLevel(stock, surfaceMax, gamma))
    }
 
    // A themed gray level with the tint, as the theme draws it.
    func tinted(_ white: Double) -> Color {
+      if isClassic {
+         return Color(white: white)
+      }
       return Color(red: white * tint.red, green: white * tint.green, blue: white * tint.blue)
    }
 }
@@ -253,9 +266,7 @@ struct MockStrip: View {
 
    func header(_ track: MockTrack) -> some View {
       let isSelected = track.number == 1
-      let rowColor = isSelected
-         ? theme.tinted(SELECTED_ROW_WHITE * theme.surfaceMax)
-         : theme.gray(STOCK_ROW)
+      let rowColor = isSelected ? theme.selectedRow : theme.gray(STOCK_ROW)
 
       return HStack(spacing: 6) {
          Text("\(track.number)")
@@ -323,6 +334,7 @@ struct ContentView: View {
    @AppStorage("surfaceMax") var surfaceMax = 1.0
    @AppStorage("gamma") var gamma = 0.75
    @AppStorage("tint") var storedTint = NO_TINT.stored
+   @AppStorage("classic") var isClassic = false
    @State var status = getLaunchStatus()
    @State var columns = NavigationSplitViewVisibility.all
 
@@ -339,13 +351,14 @@ struct ContentView: View {
    }
 
    var theme: ThemeValues {
-      return ThemeValues(surfaceMax: surfaceMax, gamma: gamma, tint: tint)
+      return ThemeValues(surfaceMax: surfaceMax, gamma: gamma, tint: tint, isClassic: isClassic)
    }
 
    var selection: Binding<String?> {
       return Binding(
-         get: { return presetName },
+         get: { return isClassic ? CLASSIC : presetName },
          set: { (name) in
+            isClassic = name == CLASSIC
             if let p = PRESETS.first(where: { (p) in return p.name == name }) {
                surfaceMax = p.surfaceMax
                gamma = p.gamma
@@ -363,6 +376,7 @@ struct ContentView: View {
                presetRow(name: p.name, summary: p.summary, surface: p.surfaceMax).tag(p.name)
             }
             presetRow(name: CUSTOM, summary: "Your own values", surface: surfaceMax).tag(CUSTOM)
+            presetRow(name: CLASSIC, summary: "Logic Pro 12 grays", surface: CLASSIC_ROW).tag(CLASSIC)
          }
          .navigationSplitViewColumnWidth(SIDEBAR_WIDTH)
          .toolbar(removing: .sidebarToggle)
@@ -370,7 +384,9 @@ struct ContentView: View {
          VStack(alignment: .leading, spacing: 18) {
             MockStrip(theme: theme)
                .accessibilityElement(children: .ignore)
-               .accessibilityLabel("Preview of Logic Pro tracks at \(percent(surfaceMax)) lightness, tint \(tint.name)")
+               .accessibilityLabel(isClassic
+                  ? "Preview of Logic Pro tracks with the Logic Pro 12 grays"
+                  : "Preview of Logic Pro tracks at \(percent(surfaceMax)) lightness, tint \(tint.name)")
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 12) {
                sliderRow("Lightness", value: $surfaceMax, range: SURFACE_RANGE, low: "Dark", high: "Light",
                   shown: percent(surfaceMax))
@@ -378,6 +394,7 @@ struct ContentView: View {
                   shown: String(format: "%.2f", gamma))
                tintRow
             }
+            .disabled(isClassic)
             Spacer(minLength: 0)
             HStack(spacing: 8) {
                Image(systemName: status.symbol).foregroundStyle(status.tint)

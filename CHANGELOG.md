@@ -4,6 +4,11 @@ This file lists the changes in each release of I See Logic Pro. The newest relea
 
 ## Unreleased
 
+### Added
+
+- A Classic row in the app. It keeps Logic Pro dark with white text, and it gives the surfaces the lighter grays of Logic Pro 12. For example, the track rows, the Mixer strips and the Inspector are medium gray again, and the Tracks area stays dark. The Lightness and Middle grays sliders and the tint do not apply to Classic.
+- The `LP_CLASSIC=1` environment variable starts Logic Pro in Classic mode for one launch with `theme/launch.sh`.
+
 ### Fixed
 
 - When you rename a track, the name is readable. Before this fix, the text was black on a dark gray band. You saw it only in a selection.

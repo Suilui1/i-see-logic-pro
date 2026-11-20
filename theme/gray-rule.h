@@ -82,3 +82,28 @@ static inline double mapTextAlpha(double white, double alpha, double surfaceMax,
    }
    return fmin(1, fmax(alpha, (back - textLimit(surfaceMax, gamma)) / (back - text)));
 }
+
+// The classic mode lifts the opaque Logic Pro 13 grays to the Logic Pro 12 grays. Each pair is a
+// Logic Pro 13 level and the Logic Pro 12 level of the same surface, for example the Tracks area,
+// the track rows and the selected row. Black stays black, and text grays do not change.
+#define CLASSIC_POINT_COUNT 5
+static const double CLASSIC_POINTS[CLASSIC_POINT_COUNT][2] = {
+   { 0.04, 0.04 }, { 0.078, 0.18 }, { 0.149, 0.341 }, { 0.251, 0.45 }, { FOREGROUND_MIN, FOREGROUND_MIN },
+};
+
+/**
+ * Maps a stock gray level to the classic gray level, by linear steps between CLASSIC_POINTS.
+ *
+ * @param white double - the stock gray level from 0 to 1
+ * @return double - the classic gray level
+ */
+static inline double mapClassicLevel(double white) {
+   for (int i = 1; i < CLASSIC_POINT_COUNT; i++) {
+      const double *low = CLASSIC_POINTS[i - 1], *high = CLASSIC_POINTS[i];
+
+      if (white >= low[0] && white <= high[0]) {
+         return low[1] + (white - low[0]) * (high[1] - low[1]) / (high[0] - low[0]);
+      }
+   }
+   return white;
+}

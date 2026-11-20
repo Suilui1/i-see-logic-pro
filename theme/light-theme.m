@@ -66,6 +66,8 @@ static ImageRange plugInRanges[MAX_PLUG_IN_RANGES];
 static volatile int plugInRangeCount = 0;
 static double grayGamma = 0.75;
 static double surfaceMax = 1;
+// The classic mode keeps Logic Pro dark and uses the Logic Pro 12 grays, see copyClassicColor.
+static BOOL isClassic = NO;
 static double accentDarken = ACCENT_DARKEN;
 // The color that multiplies each mapped gray. White gives no tint.
 static CGFloat tint[3] = { 1, 1, 1 };
@@ -367,6 +369,72 @@ static CGColorRef realCGColor(id named) {
 }
 
 /**
+ * Returns the Logic Pro 12 color for a Logic Pro 13 color, in the classic mode. Logic Pro 12 drew
+ * with the Colors/ names, and Logic Pro 13 still ships them in MAResources with the same values,
+ * so the theme reads them from the installed bundle. Other opaque grays follow mapClassicLevel.
+ *
+ * @param color CGColorRef - the original color
+ * @param name NSString * - the catalog color name
+ * @return CGColorRef - a retained color, or NULL if the color does not change
+ */
+static CGColorRef copyClassicColor(CGColorRef color, NSString *name) {
+   static NSDictionary<NSString *, NSString *> *classicNames;
+   static NSBundle *resources;
+   static dispatch_once_t once;
+   NSColor *classic;
+   CGColorRef rgb, mapped = NULL;
+
+   dispatch_once(&once, ^{
+      resources = [NSBundle bundleWithIdentifier:@"com.apple.music.apps.MAResources"];
+      classicNames = @{
+         @"TrackHeaderBackground": @"Colors/TrackHeader/Background",
+         @"TrackHeaderBackgroundSelected": @"Colors/TrackHeader/SelectedBackground",
+         @"ArrangeTrackBackground": @"Colors/ArrangeWorkspaceColor",
+         @"BackgroundWorkspace": @"Colors/ArrangeWorkspaceColor",
+         @"RulerBackground": @"Colors/RulerColor",
+         @"GlobalTracksBackground": @"Colors/RulerColor",
+         @"BackgroundViewControlbar": @"Colors/PanelHeaderColor",
+         @"BackgroundLocalMenubar": @"Colors/PanelHeaderColor",
+         @"ChannelstripBackground": @"Colors/TrackHeader/Background",
+         @"ChannelstripBackgroundSelected": @"Colors/TrackHeader/SelectedBackground",
+      };
+   });
+   classic = classicNames[name] ? [NSColor colorNamed:classicNames[name] bundle:resources] : nil;
+   if (classic) {
+      return CGColorRetain(classic.CGColor);
+   }
+   // The transport display keeps its dark LCD look, as in Logic Pro 12. The Colors/ names
+   // are the Logic Pro 12 grays, and they also come through this hook from the line above.
+   if ([name hasPrefix:@"TransportDisplay"] || [name hasPrefix:@"Colors/"]) {
+      return NULL;
+   }
+   // The Setting buttons of the Mixer have black text in Logic Pro 12.
+   if ([name isEqualToString:@"MixerSlotLabelsEmpty"]) {
+      return CGColorCreate(srgbSpace, (CGFloat[]){ 0, 0, 0, 0.85 });
+   }
+   // The empty slots of the Mixer are only a little darker than the strip in Logic Pro 12.
+   if ([name isEqualToString:@"MixerContainerBackgroundSoft"]) {
+      return CGColorCreate(srgbSpace, (CGFloat[]){ 0, 0, 0, 0.08 });
+   }
+   rgb = CGColorCreateCopyByMatchingToColorSpace(srgbSpace, kCGRenderingIntentDefault, color, NULL);
+   if (rgb && CGColorGetNumberOfComponents(rgb) == 4) {
+      const CGFloat *c = CGColorGetComponents(rgb);
+      CGFloat level = (c[0] + c[1] + c[2]) / 3;
+
+      if (c[3] >= 1 && isGrayish(c[0], c[1], c[2]) && level < FOREGROUND_MIN) {
+         CGFloat shift = mapClassicLevel(level) - level;
+         CGFloat values[4] = { c[0] + shift, c[1] + shift, c[2] + shift, 1 };
+
+         mapped = CGColorCreate(srgbSpace, values);
+      }
+   }
+   if (rgb) {
+      CGColorRelease(rgb);
+   }
+   return mapped;
+}
+
+/**
  * Returns the mapped color for Logic catalog colors that have one appearance. AppKit and
  * SwiftUI both read catalog colors here. Each color instance is mapped once.
  *
@@ -382,8 +450,8 @@ static CGColorRef hookCGColor(id named, SEL sel) {
       tag = [NSNull null];
       NSString *name = [named valueForKey:@"name"];
 
-      if ([singleAppearanceNames containsObject:name]) {
-         mapped = copyMappedColor(realCGColor(named), name);
+      if (isClassic || [singleAppearanceNames containsObject:name]) {
+         mapped = isClassic ? copyClassicColor(realCGColor(named), name) : copyMappedColor(realCGColor(named), name);
          if (mapped) {
             tag = CFBridgingRelease(mapped);
          }
@@ -1429,6 +1497,15 @@ __attribute__((constructor)) static void start(void) {
    accentDarken = ACCENT_DARKEN * pow(surfaceMax, ACCENT_SURFACE_POWER);
    readTint();
    srgbSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+   isClassic = readSetting("LP_CLASSIC", @"classic", 0, 0, 1) >= 0.5;
+   if (isClassic) {
+      origCGColor = method_setImplementation(class_getInstanceMethod(NSClassFromString(@"CUINamedColor"), @selector(cgColor)), (IMP)hookCGColor);
+      if (getenv("LP_OUT")) {
+         outDir = [NSString stringWithUTF8String:getenv("LP_OUT")];
+         renderTest();
+      }
+      return;
+   }
    singleAppearanceNames = listSingleAppearanceNames();
    trueAqua = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
    _dyld_register_func_for_add_image(addImage);

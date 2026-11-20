@@ -99,6 +99,12 @@ A tint gives the gray surfaces a light color. The tints are Cool, Mist, Sage, Sa
 
 The theme multiplies each gray by the tint. Light surfaces get a visible color, and black text gets almost none, so the text stays easy to read. All tints are light, so the colors of Logic Pro, such as the red Record button and the track colors, stay clear. The swatches in the app show each color stronger than the theme, so that you can tell them apart. The preview shows the true color.
 
+## Use the Logic Pro 12 grays
+
+If you want the dark look of Logic Pro 12 instead of a light theme, select Classic in the app. Logic Pro stays dark, and text stays white. The track rows, the Mixer strips, the Inspector and the bars are the lighter grays of Logic Pro 12. The Tracks area, the ruler and the transport display stay dark.
+
+The theme reads the Logic Pro 12 grays from Logic Pro 13 at each launch, because Logic Pro 13 still contains them. For the grays that Logic Pro 12 did not have, the theme uses a curve between the two versions. The sliders and the tint do not apply to Classic.
+
 ## Use from a terminal
 
 You can also start Logic Pro with the theme from a terminal:
@@ -119,7 +125,7 @@ If Logic Pro is open, `launch.sh` stops and tells you to quit Logic Pro first. `
 LP_SURFACE_MAX=0.85 LP_GAMMA=0.85 LP_TINT=0.9,0.94,1 theme/launch.sh
 ```
 
-`LP_SURFACE_MAX` is the lightness, and `LP_GAMMA` is the middle grays value. `LP_TINT` is the tint as three numbers from 0 to 1 for red, green and blue. The theme scales them so that the largest is 1. To change the stored settings without the app, use `defaults`:
+`LP_SURFACE_MAX` is the lightness, and `LP_GAMMA` is the middle grays value. `LP_CLASSIC=1` starts Logic Pro in Classic mode, and `LP_CLASSIC=0` turns Classic mode off. `LP_TINT` is the tint as three numbers from 0 to 1 for red, green and blue. The theme scales them so that the largest is 1. To change the stored settings without the app, use `defaults`:
 
 ```sh
 defaults write io.github.karlingen.i-see-logic-pro surfaceMax -float 0.85
