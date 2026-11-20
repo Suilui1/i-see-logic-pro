@@ -9,13 +9,16 @@ let LOGIC_PATH = "/Applications/Logic Pro.app"
 // The limits, the gray rule and SELECTED_ROW_WHITE come from theme/gray-rule.h.
 let SURFACE_RANGE = SURFACE_MAX_MIN...1.0
 let GAMMA_RANGE = GAMMA_MIN...GAMMA_MAX
+let CONTRAST_RANGE = TEXT_CONTRAST_MIN...TEXT_CONTRAST_MAX
 let PRESET_MATCH = 0.005
 let CUSTOM = "Custom"
 let CLASSIC = "Classic"
 // The Logic Pro 12 grays of a track row and a selected track row, which the classic mode uses.
 let CLASSIC_ROW = 0.341
 let CLASSIC_SELECTED_ROW = 0.45
-let WINDOW_SIZE = CGSize(width: 720, height: 400)
+// Taller than 400: the contrast slider adds a fourth row, and the buttons at the bottom
+// must stay inside the window. (20.11.2026)
+let WINDOW_SIZE = CGSize(width: 720, height: 520)
 let SIDEBAR_WIDTH = 190.0
 let HEADER_WIDTH = 290.0
 let ROW_HEIGHT = 34.0
@@ -333,6 +336,8 @@ struct MockStrip: View {
 struct ContentView: View {
    @AppStorage("surfaceMax") var surfaceMax = 1.0
    @AppStorage("gamma") var gamma = 0.75
+   /// The contrast that secondary text keeps, 4.5 to 12. The theme reads it as "contrast".
+   @AppStorage("contrast") var contrast = TEXT_CONTRAST
    @AppStorage("tint") var storedTint = NO_TINT.stored
    @AppStorage("classic") var isClassic = false
    @State var status = getLaunchStatus()
@@ -390,6 +395,8 @@ struct ContentView: View {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 12) {
                sliderRow("Lightness", value: $surfaceMax, range: SURFACE_RANGE, low: "Dark", high: "Light",
                   shown: percent(surfaceMax))
+               sliderRow("Text contrast", value: $contrast, range: CONTRAST_RANGE, low: "Soft", high: "Crisp",
+                  shown: String(format: "%.1f:1", contrast), step: 0.1)
                sliderRow("Middle grays", value: $gamma, range: GAMMA_RANGE, low: "Light", high: "Dark",
                   shown: String(format: "%.2f", gamma))
                tintRow
@@ -433,7 +440,7 @@ struct ContentView: View {
    }
 
    func sliderRow(_ label: String, value: Binding<Double>, range: ClosedRange<Double>, low: String,
-      high: String, shown: String) -> some View {
+      high: String, shown: String, step: Double = 0.01) -> some View {
       return GridRow {
          Text(label)
          // The end labels are plain text, because macOS draws the value labels of a Slider dimmed.
@@ -441,7 +448,7 @@ struct ContentView: View {
             Text(low).font(.caption).foregroundStyle(.secondary)
                .frame(width: END_LABEL_WIDTH, alignment: .trailing)
                .accessibilityHidden(true)
-            Slider(value: value, in: range) {
+            Slider(value: value, in: range, step: step) {
                Text(label)
             }
             .labelsHidden()
