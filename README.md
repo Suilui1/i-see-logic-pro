@@ -2,9 +2,9 @@
 
 <img src="docs/icon.png" width="128" alt="The I See Logic Pro icon">
 
-A customizable light theme for Logic Pro 13. Logic Pro has only a dark interface. This project changes its colors to light colors while Logic Pro runs.
+Custom colors for Logic Pro 13. Logic Pro 13 has only one dark interface. This project gives it a light theme that you can adjust. It also has a Classic mode, which keeps Logic Pro dark with the lighter grays of Logic Pro 12. It changes the colors while Logic Pro runs.
 
-The theme is a small library that Logic Pro loads at launch. It changes nothing in the Logic Pro app or on disk. If you start Logic Pro from the Dock, you get the normal dark interface. A small launcher app starts Logic Pro with the theme and lets you set the brightness.
+The theme is a small library that Logic Pro loads at launch. It changes nothing in the Logic Pro app or on disk. If you start Logic Pro from the Dock, you get the normal dark interface. A small launcher app starts Logic Pro with the theme and lets you choose the look.
 
 ![Logic Pro with the Light preset of I See Logic Pro](docs/light-theme.png)
 
@@ -13,6 +13,7 @@ This project is a prototype. It is not from Apple, and Apple does not support it
 ## Requirements
 
 - Logic Pro 13.0 (build 7801). Other versions are not tested.
+- The Logic Pro app that you buy once. The theme does not work with the Logic Pro of Apple Creator Studio.
 - A Mac with Apple silicon. The library is built for arm64 only.
 - macOS 26. Other versions are not tested.
 
@@ -104,6 +105,8 @@ The theme multiplies each gray by the tint. Light surfaces get a visible color, 
 If you want the dark look of Logic Pro 12 instead of a light theme, select Classic in the app. Logic Pro stays dark, and text stays white. The track rows, the Mixer strips, the Inspector and the bars are the lighter grays of Logic Pro 12. The Tracks area, the ruler and the transport display stay dark.
 
 The theme reads the Logic Pro 12 grays from Logic Pro 13 at each launch, because Logic Pro 13 still contains them. For the grays that Logic Pro 12 did not have, the theme uses a curve between the two versions. The sliders and the tint do not apply to Classic.
+
+![Logic Pro in the Classic mode of I See Logic Pro](docs/classic-theme.png)
 
 ## Use from a terminal
 

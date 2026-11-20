@@ -2,7 +2,7 @@
 
 This file gives guidance to Claude Code (claude.ai/code) for the code in this repository.
 
-This project adds a light theme to Logic Pro 13.0 (build 7801, `com.apple.logic10`, arm64). The theme is one library that loads at launch with `DYLD_INSERT_LIBRARIES`. It changes nothing on disk.
+This project adds a light theme and a Classic mode to Logic Pro 13.0 (build 7801, `com.apple.logic10`, arm64). The theme is one library that loads at launch with `DYLD_INSERT_LIBRARIES`. It changes nothing on disk.
 
 ## Rules for a running Logic Pro
 
