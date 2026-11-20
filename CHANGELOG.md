@@ -2,7 +2,7 @@
 
 This file lists the changes in each release of I See Logic Pro. The newest release is first.
 
-## Unreleased
+## 1.2.0 (2026-11-20)
 
 ### Added
 
