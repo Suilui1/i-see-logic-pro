@@ -332,7 +332,7 @@ struct MockStrip: View {
                .frame(width: BAR_WIDTH, alignment: .leading)
          }
       }
-      .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+      .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
       .background(theme.gray(STOCK_RULER))
       .clipped()
    }
