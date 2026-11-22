@@ -189,12 +189,13 @@ enum UpdateCheck {
 }
 
 enum LaunchStatus {
-   case ready, logicRunning, logicMissing, libraryMissing, failed(String)
+   case ready, readyPlain, logicRunning, logicMissing, libraryMissing, failed(String)
    case logicUntested(tested: String, installed: String)
 
    var text: String {
       switch self {
       case .ready: return "Ready. Logic Pro starts with the theme."
+      case .readyPlain: return "Ready. Logic Pro starts without the theme."
       case .logicRunning: return "Quit Logic Pro first. The theme loads only at launch."
       case .logicMissing: return "Logic Pro is not in the Applications folder."
       case .libraryMissing: return "The theme library is missing. Download the app again."
@@ -206,7 +207,7 @@ enum LaunchStatus {
 
    var symbol: String {
       switch self {
-      case .ready: return "checkmark.circle.fill"
+      case .ready, .readyPlain: return "checkmark.circle.fill"
       case .failed: return "xmark.octagon.fill"
       default: return "exclamationmark.triangle.fill"
       }
@@ -214,7 +215,7 @@ enum LaunchStatus {
 
    var tint: Color {
       switch self {
-      case .ready: return .green
+      case .ready, .readyPlain: return .green
       case .failed: return .red
       default: return .orange
       }
@@ -222,7 +223,7 @@ enum LaunchStatus {
 
    var canStart: Bool {
       switch self {
-      case .ready, .logicUntested, .failed: return true
+      case .ready, .readyPlain, .logicUntested, .failed: return true
       default: return false
       }
    }
@@ -240,13 +241,14 @@ func isLogicRunning() -> Bool {
 /**
  * Finds the state of the launch from the files and the running apps.
  *
+ * @param themeOff Bool - true if Logic Pro starts without the theme, which needs no library
  * @return LaunchStatus - the state to show
  */
-func getLaunchStatus() -> LaunchStatus {
+func getLaunchStatus(themeOff: Bool) -> LaunchStatus {
    let tested = Bundle.main.infoDictionary?["TestedLogicBuild"] as? String
    let installed = Bundle(path: LOGIC_PATH)?.infoDictionary?["CFBundleVersion"] as? String
 
-   if Bundle.main.path(forResource: "light-theme", ofType: "dylib") == nil {
+   if !themeOff && Bundle.main.path(forResource: "light-theme", ofType: "dylib") == nil {
       return .libraryMissing
    }
    guard let installed else {
@@ -254,6 +256,9 @@ func getLaunchStatus() -> LaunchStatus {
    }
    if isLogicRunning() {
       return .logicRunning
+   }
+   if themeOff {
+      return .readyPlain
    }
    if let tested, tested != installed {
       return .logicUntested(tested: tested, installed: installed)
@@ -399,7 +404,7 @@ struct ContentView: View {
    @AppStorage("classic") var isClassic = false
    /// When on, Logic Pro starts without the theme: exactly as Apple ships it.
    @AppStorage("themeOff") var themeOff = false
-   @State var status = getLaunchStatus()
+   @State var status = LaunchStatus.ready
    @State var columns = NavigationSplitViewVisibility.all
    /// The answer of the update check, shown under the status line.
    @State var updateText = ""
@@ -506,11 +511,17 @@ struct ContentView: View {
          .navigationTitle("I See Logic Pro")
       }
       .frame(width: WINDOW_SIZE.width, height: WINDOW_SIZE.height)
+      .onAppear {
+         status = getLaunchStatus(themeOff: themeOff)
+      }
+      .onChange(of: themeOff) {
+         status = getLaunchStatus(themeOff: themeOff)
+      }
       .onReceive(workspace.publisher(for: NSWorkspace.didLaunchApplicationNotification)) { (_) in
-         status = getLaunchStatus()
+         status = getLaunchStatus(themeOff: themeOff)
       }
       .onReceive(workspace.publisher(for: NSWorkspace.didTerminateApplicationNotification)) { (_) in
-         status = getLaunchStatus()
+         status = getLaunchStatus(themeOff: themeOff)
       }
    }
 
@@ -629,23 +640,27 @@ struct ContentView: View {
    }
 
    /**
-    * Starts Logic Pro with the theme library from this app bundle, then quits this app.
+    * Starts Logic Pro with the theme library from this app bundle, or without it if the theme
+    * is off, then quits this app.
     */
    func startLogic() {
       let open = Process()
+      // "Theme off" starts Logic Pro the plain way, without injecting the library. (20.11.2026)
+      var arguments = [ "-n", "-a", LOGIC_PATH ]
 
-      guard let library = Bundle.main.path(forResource: "light-theme", ofType: "dylib") else {
-         return
-      }
       if isLogicRunning() {
          status = .logicRunning
          return
       }
+      if !themeOff {
+         guard let library = Bundle.main.path(forResource: "light-theme", ofType: "dylib") else {
+            status = .libraryMissing
+            return
+         }
+         arguments = [ "-n", "--env", "DYLD_INSERT_LIBRARIES=\(library)", "-a", LOGIC_PATH ]
+      }
       open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-      // "Theme off" starts Logic Pro the plain way, without injecting the library. (20.11.2026)
-      open.arguments = themeOff
-         ? [ "-n", "-a", LOGIC_PATH ]
-         : [ "-n", "--env", "DYLD_INSERT_LIBRARIES=\(library)", "-a", LOGIC_PATH ]
+      open.arguments = arguments
       do {
          try open.run()
          open.waitUntilExit()
