@@ -9,13 +9,16 @@ let LOGIC_PATH = "/Applications/Logic Pro.app"
 // The limits, the gray rule and SELECTED_ROW_WHITE come from theme/gray-rule.h.
 let SURFACE_RANGE = SURFACE_MAX_MIN...1.0
 let GAMMA_RANGE = GAMMA_MIN...GAMMA_MAX
+let CONTRAST_RANGE = TEXT_CONTRAST_MIN...TEXT_CONTRAST_MAX
 let PRESET_MATCH = 0.005
 let CUSTOM = "Custom"
 let CLASSIC = "Classic"
 // The Logic Pro 12 grays of a track row and a selected track row, which the classic mode uses.
 let CLASSIC_ROW = 0.341
 let CLASSIC_SELECTED_ROW = 0.45
-let WINDOW_SIZE = CGSize(width: 720, height: 400)
+// Taller than 400: the contrast slider adds a fourth row, and the buttons at the bottom
+// must stay inside the window. (20.11.2026)
+let WINDOW_SIZE = CGSize(width: 720, height: 520)
 let SIDEBAR_WIDTH = 190.0
 let HEADER_WIDTH = 290.0
 let ROW_HEIGHT = 34.0
@@ -128,13 +131,71 @@ struct ThemeValues {
    }
 }
 
+/// What GitHub reports as the newest release.
+struct ReleaseInfo {
+   let tag: String
+   let page: String
+}
+
+/// Asks GitHub for the newest release. It only reads the public release list and never
+/// replaces the app: this copy may carry changes that an update would throw away.
+enum UpdateCheck {
+   static let repository = "karlingen/i-see-logic-pro"
+
+   static var current: String {
+      return Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+   }
+
+   /// Compares "1.2.0" with "1.1.1" number by number, so that 1.10 counts as newer than 1.9.
+   static func isNewer(_ candidate: String, than current: String) -> Bool {
+      let a = numbers(in: candidate)
+      let b = numbers(in: current)
+
+      for index in 0..<max(a.count, b.count) {
+         let left = index < a.count ? a[index] : 0
+         let right = index < b.count ? b[index] : 0
+
+         if left != right {
+            return left > right
+         }
+      }
+      return false
+   }
+
+   static func numbers(in text: String) -> [Int] {
+      return text.split(whereSeparator: { (c) in return !c.isNumber }).map { (part) in
+         return Int(part) ?? 0
+      }
+   }
+
+   static func latest() async throws -> ReleaseInfo {
+      let address = "https://api.github.com/repos/\(repository)/releases/latest"
+      var request = URLRequest(url: URL(string: address)!)
+
+      request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+      request.timeoutInterval = 15
+
+      let (data, response) = try await URLSession.shared.data(for: request)
+
+      guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let tag = json["tag_name"] as? String else {
+         throw NSError(domain: "UpdateCheck", code: 1,
+                       userInfo: [NSLocalizedDescriptionKey: "Unexpected answer from GitHub."])
+      }
+      return ReleaseInfo(tag: tag,
+                         page: json["html_url"] as? String ?? "https://github.com/\(repository)/releases")
+   }
+}
+
 enum LaunchStatus {
-   case ready, logicRunning, logicMissing, libraryMissing, failed(String)
+   case ready, readyPlain, logicRunning, logicMissing, libraryMissing, failed(String)
    case logicUntested(tested: String, installed: String)
 
    var text: String {
       switch self {
       case .ready: return "Ready. Logic Pro starts with the theme."
+      case .readyPlain: return "Ready. Logic Pro starts without the theme."
       case .logicRunning: return "Quit Logic Pro first. The theme loads only at launch."
       case .logicMissing: return "Logic Pro is not in the Applications folder."
       case .libraryMissing: return "The theme library is missing. Download the app again."
@@ -146,7 +207,7 @@ enum LaunchStatus {
 
    var symbol: String {
       switch self {
-      case .ready: return "checkmark.circle.fill"
+      case .ready, .readyPlain: return "checkmark.circle.fill"
       case .failed: return "xmark.octagon.fill"
       default: return "exclamationmark.triangle.fill"
       }
@@ -154,7 +215,7 @@ enum LaunchStatus {
 
    var tint: Color {
       switch self {
-      case .ready: return .green
+      case .ready, .readyPlain: return .green
       case .failed: return .red
       default: return .orange
       }
@@ -162,7 +223,7 @@ enum LaunchStatus {
 
    var canStart: Bool {
       switch self {
-      case .ready, .logicUntested, .failed: return true
+      case .ready, .readyPlain, .logicUntested, .failed: return true
       default: return false
       }
    }
@@ -180,13 +241,14 @@ func isLogicRunning() -> Bool {
 /**
  * Finds the state of the launch from the files and the running apps.
  *
+ * @param themeOff Bool - true if Logic Pro starts without the theme, which needs no library
  * @return LaunchStatus - the state to show
  */
-func getLaunchStatus() -> LaunchStatus {
+func getLaunchStatus(themeOff: Bool) -> LaunchStatus {
    let tested = Bundle.main.infoDictionary?["TestedLogicBuild"] as? String
    let installed = Bundle(path: LOGIC_PATH)?.infoDictionary?["CFBundleVersion"] as? String
 
-   if Bundle.main.path(forResource: "light-theme", ofType: "dylib") == nil {
+   if !themeOff && Bundle.main.path(forResource: "light-theme", ofType: "dylib") == nil {
       return .libraryMissing
    }
    guard let installed else {
@@ -194,6 +256,9 @@ func getLaunchStatus() -> LaunchStatus {
    }
    if isLogicRunning() {
       return .logicRunning
+   }
+   if themeOff {
+      return .readyPlain
    }
    if let tested, tested != installed {
       return .logicUntested(tested: tested, installed: installed)
@@ -333,10 +398,18 @@ struct MockStrip: View {
 struct ContentView: View {
    @AppStorage("surfaceMax") var surfaceMax = 1.0
    @AppStorage("gamma") var gamma = 0.75
+   /// The contrast that secondary text keeps, 4.5 to 12. The theme reads it as "contrast".
+   @AppStorage("contrast") var contrast = TEXT_CONTRAST
    @AppStorage("tint") var storedTint = NO_TINT.stored
    @AppStorage("classic") var isClassic = false
-   @State var status = getLaunchStatus()
+   /// When on, Logic Pro starts without the theme: exactly as Apple ships it.
+   @AppStorage("themeOff") var themeOff = false
+   @State var status = LaunchStatus.ready
    @State var columns = NavigationSplitViewVisibility.all
+   /// The answer of the update check, shown under the status line.
+   @State var updateText = ""
+   /// Where the newest release can be downloaded, once one was found.
+   @State var updatePage: String?
 
    var presetName: String {
       let match = PRESETS.first { (p) in
@@ -371,12 +444,20 @@ struct ContentView: View {
       let workspace = NSWorkspace.shared.notificationCenter
 
       NavigationSplitView(columnVisibility: $columns) {
-         List(selection: selection) {
-            ForEach(PRESETS) { (p) in
-               presetRow(name: p.name, summary: p.summary, surface: p.surfaceMax).tag(p.name)
+         VStack(spacing: 0) {
+            List(selection: selection) {
+               ForEach(PRESETS) { (p) in
+                  presetRow(name: p.name, summary: p.summary, surface: p.surfaceMax).tag(p.name)
+               }
+               presetRow(name: CUSTOM, summary: "Your own values", surface: surfaceMax).tag(CUSTOM)
+               presetRow(name: CLASSIC, summary: "Logic Pro 12 grays", surface: CLASSIC_ROW).tag(CLASSIC)
             }
-            presetRow(name: CUSTOM, summary: "Your own values", surface: surfaceMax).tag(CUSTOM)
-            presetRow(name: CLASSIC, summary: "Logic Pro 12 grays", surface: CLASSIC_ROW).tag(CLASSIC)
+            Divider()
+            Toggle("No theme", isOn: $themeOff)
+               .toggleStyle(.switch)
+               .controlSize(.small)
+               .padding(10)
+               .accessibilityHint("Starts Logic Pro exactly as Apple ships it")
          }
          .navigationSplitViewColumnWidth(SIDEBAR_WIDTH)
          .toolbar(removing: .sidebarToggle)
@@ -390,6 +471,8 @@ struct ContentView: View {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 12) {
                sliderRow("Lightness", value: $surfaceMax, range: SURFACE_RANGE, low: "Dark", high: "Light",
                   shown: percent(surfaceMax))
+               sliderRow("Text contrast", value: $contrast, range: CONTRAST_RANGE, low: "Soft", high: "Crisp",
+                  shown: String(format: "%.1f:1", contrast), step: 0.1)
                sliderRow("Middle grays", value: $gamma, range: GAMMA_RANGE, low: "Light", high: "Dark",
                   shown: String(format: "%.2f", gamma))
                tintRow
@@ -398,8 +481,26 @@ struct ContentView: View {
             Spacer(minLength: 0)
             HStack(spacing: 8) {
                Image(systemName: status.symbol).foregroundStyle(status.tint)
-               Text(status.text).foregroundStyle(.secondary).lineLimit(2)
+               VStack(alignment: .leading, spacing: 2) {
+                  Text(status.text).foregroundStyle(.secondary).lineLimit(2)
+                  if !updateText.isEmpty {
+                     Text(updateText).font(.caption).foregroundStyle(.tertiary).lineLimit(2)
+                  }
+               }
                Spacer()
+               if let page = updatePage {
+                  Button("Get \(updateText)") {
+                     if let address = URL(string: page) {
+                        NSWorkspace.shared.open(address)
+                     }
+                  }
+                  .controlSize(.large)
+               }
+               Button("Check for Updates") {
+                  checkForUpdates()
+               }
+               .controlSize(.large)
+               .disabled(updateText == "Checking ...")
                Button("Start Logic Pro", action: startLogic)
                   .keyboardShortcut(.defaultAction)
                   .controlSize(.large)
@@ -410,11 +511,46 @@ struct ContentView: View {
          .navigationTitle("I See Logic Pro")
       }
       .frame(width: WINDOW_SIZE.width, height: WINDOW_SIZE.height)
+      .onAppear {
+         status = getLaunchStatus(themeOff: themeOff)
+      }
+      .onChange(of: themeOff) {
+         status = getLaunchStatus(themeOff: themeOff)
+      }
       .onReceive(workspace.publisher(for: NSWorkspace.didLaunchApplicationNotification)) { (_) in
-         status = getLaunchStatus()
+         status = getLaunchStatus(themeOff: themeOff)
       }
       .onReceive(workspace.publisher(for: NSWorkspace.didTerminateApplicationNotification)) { (_) in
-         status = getLaunchStatus()
+         status = getLaunchStatus(themeOff: themeOff)
+      }
+   }
+
+   /**
+    * Asks GitHub for the newest release and shows it. It does not replace the app itself:
+    * this copy is built from a branch of its own, and an ad-hoc signed bundle that overwrites
+    * itself is a good way to end up with something that no longer starts.
+    */
+   @MainActor func checkForUpdates() {
+      updatePage = nil
+      updateText = "Checking ..."
+      Task {
+         do {
+            let release = try await UpdateCheck.latest()
+            let current = UpdateCheck.current
+
+            if current == "dev" || !UpdateCheck.isNewer(release.tag, than: current) {
+               updateText = current == "dev"
+                  ? "Local build, newest is \(release.tag)"
+                  : "Up to date (\(release.tag))"
+               updatePage = nil
+            } else {
+               updateText = release.tag
+               updatePage = release.page
+            }
+         } catch {
+            updateText = "No answer from GitHub"
+            updatePage = nil
+         }
       }
    }
 
@@ -433,7 +569,7 @@ struct ContentView: View {
    }
 
    func sliderRow(_ label: String, value: Binding<Double>, range: ClosedRange<Double>, low: String,
-      high: String, shown: String) -> some View {
+      high: String, shown: String, step: Double = 0.01) -> some View {
       return GridRow {
          Text(label)
          // The end labels are plain text, because macOS draws the value labels of a Slider dimmed.
@@ -441,7 +577,7 @@ struct ContentView: View {
             Text(low).font(.caption).foregroundStyle(.secondary)
                .frame(width: END_LABEL_WIDTH, alignment: .trailing)
                .accessibilityHidden(true)
-            Slider(value: value, in: range) {
+            Slider(value: value, in: range, step: step) {
                Text(label)
             }
             .labelsHidden()
@@ -504,20 +640,27 @@ struct ContentView: View {
    }
 
    /**
-    * Starts Logic Pro with the theme library from this app bundle, then quits this app.
+    * Starts Logic Pro with the theme library from this app bundle, or without it if the theme
+    * is off, then quits this app.
     */
    func startLogic() {
       let open = Process()
+      // "Theme off" starts Logic Pro the plain way, without injecting the library. (20.11.2026)
+      var arguments = [ "-n", "-a", LOGIC_PATH ]
 
-      guard let library = Bundle.main.path(forResource: "light-theme", ofType: "dylib") else {
-         return
-      }
       if isLogicRunning() {
          status = .logicRunning
          return
       }
+      if !themeOff {
+         guard let library = Bundle.main.path(forResource: "light-theme", ofType: "dylib") else {
+            status = .libraryMissing
+            return
+         }
+         arguments = [ "-n", "--env", "DYLD_INSERT_LIBRARIES=\(library)", "-a", LOGIC_PATH ]
+      }
       open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-      open.arguments = [ "-n", "--env", "DYLD_INSERT_LIBRARIES=\(library)", "-a", LOGIC_PATH ]
+      open.arguments = arguments
       do {
          try open.run()
          open.waitUntilExit()
