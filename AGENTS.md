@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file gives guidance to Claude Code (claude.ai/code) for the code in this repository.
+This file gives guidance to people and coding agents that work on the code in this repository. `CLAUDE.md` imports it, so Claude Code reads the same rules.
 
 This project adds a light theme and a Classic mode to Logic Pro 13.0 (build 7801, `com.apple.logic10`, arm64). The theme is one library that loads at launch with `DYLD_INSERT_LIBRARIES`. It changes nothing on disk.
 
@@ -40,6 +40,40 @@ open -g -n --env DYLD_INSERT_LIBRARIES="$PWD/theme/light-theme.dylib" --env LP_O
 ```
 
 If the project opens slowly, the render finds no visible window. Use an `LP_DELAY` of 55 in that case. The render omits the playhead. For a true capture, use `screencapture -x -o -l <window-number>`.
+
+## Code style
+
+Follow the style of the code around your change. These rules apply to Objective-C, Swift and shell code:
+
+- Indent with 3 spaces, never tabs. Put the opening brace at the end of the line.
+- Always use braces after `if`, `for` and `while`, also for one statement.
+- Return early for error conditions, so that blocks do not nest deeply. Do not nest the ternary operator.
+- Name functions and variables in camelCase and constants in UPPER_SNAKE_CASE, for example `TEXT_CONTRAST`. Start the name of a function that returns a value with `get`. Use `list` for a function that returns a list, and `is` for a Boolean.
+- Put a number with a meaning in a named constant, with a comment that tells where the value comes from.
+- Put spaces inside array brackets, for example `[ "-n", "-a", LOGIC_PATH ]`.
+- Write comments in ASCII only, with US spelling.
+- Give each new function a doc block in this format:
+
+```objc
+/**
+ * Maps a stock gray level to the themed gray level.
+ *
+ * @param white double - the stock gray level from 0 to 1
+ * @return double - the themed gray level
+ */
+```
+
+## Commits and pull requests
+
+- Use Conventional Commits: `<type>: <subject>`. The types for code changes are `feat`, `fix`, `perf`, `refactor` and `style`. The other types are `docs`, `test`, `build`, `ci`, `chore`, `config` and `revert`.
+- Write the subject in the imperative mood, for example "Add a contrast setting". Keep the subject line at 72 characters or less, with no period at the end.
+- In the body, tell why the change is necessary. Keep each line at 90 characters or less.
+- Make each commit one complete change that a reviewer can read alone. Put a rename or a move of a file in a commit of its own.
+- A squash merge uses the title of the pull request as the commit subject, so the title follows the same rules. The workflow `.github/workflows/pr-title.yml` fails a pull request with a wrong title.
+
+## Documents
+
+Write the README, this file, the changelog and the comments in plain English for readers whose first language is not English. Use short sentences, the active voice and simple tenses. Of the modal verbs, use only "must" and "can". Do not use semicolons or em dashes. Use US spelling.
 
 ## Architecture
 
