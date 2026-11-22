@@ -1357,12 +1357,20 @@ static void reportStart(void) {
  */
 static IMP swapInstanceMethod(Class cls, SEL sel, IMP hook) {
    Method method = cls ? class_getInstanceMethod(cls, sel) : NULL;
+   IMP original;
 
    if (!method) {
       noteSkipped(class_getName(cls) ?: "?", sel_getName(sel));
       return NULL;
    }
+   original = method_getImplementation(method);
    hooksInstalled++;
+   /* class_getInstanceMethod also finds inherited methods. Replacing the implementation
+      would then change the parent class for every subclass, so the method is added to this
+      class first; that fails when the class implements the method itself. (22.11.2026) */
+   if (class_addMethod(cls, sel, hook, method_getTypeEncoding(method))) {
+      return original;
+   }
    return method_setImplementation(method, hook);
 }
 
@@ -1376,12 +1384,18 @@ static IMP swapInstanceMethod(Class cls, SEL sel, IMP hook) {
  */
 static IMP swapClassMethod(Class cls, SEL sel, IMP hook) {
    Method method = cls ? class_getClassMethod(cls, sel) : NULL;
+   IMP original;
 
    if (!method) {
       noteSkipped(class_getName(cls) ?: "?", sel_getName(sel));
       return NULL;
    }
+   original = method_getImplementation(method);
    hooksInstalled++;
+   /* A class method lives on the metaclass, so that is where it is added. */
+   if (class_addMethod(object_getClass(cls), sel, hook, method_getTypeEncoding(method))) {
+      return original;
+   }
    return method_setImplementation(method, hook);
 }
 
