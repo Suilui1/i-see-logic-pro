@@ -527,23 +527,29 @@ struct ContentView: View {
                   }
                }
                Spacer()
+               Button("Start Logic Pro", action: startLogic)
+                  .keyboardShortcut(.defaultAction)
+                  .controlSize(.large)
+                  .disabled(!status.canStart)
+            }
+            // The update controls get a row of their own: on the status row they took the
+            // width the status text needs, and the untested-build warning is the longest
+            // line in the app.
+            HStack(spacing: 8) {
                if let page = updatePage {
                   Button("Get \(updateText)") {
                      if let address = URL(string: page) {
                         NSWorkspace.shared.open(address)
                      }
                   }
-                  .controlSize(.large)
+                  .controlSize(.regular)
                }
                Button("Check for Updates") {
                   checkForUpdates()
                }
-               .controlSize(.large)
+               .controlSize(.regular)
                .disabled(updateText == "Checking ...")
-               Button("Start Logic Pro", action: startLogic)
-                  .keyboardShortcut(.defaultAction)
-                  .controlSize(.large)
-                  .disabled(!status.canStart)
+               Spacer()
             }
          }
          .padding(20)
