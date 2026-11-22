@@ -13,6 +13,7 @@ let CONTRAST_RANGE = TEXT_CONTRAST_MIN...TEXT_CONTRAST_MAX
 let PRESET_MATCH = 0.005
 let CUSTOM = "Custom"
 let CLASSIC = "Classic"
+let STOCK = "Stock"
 // The Logic Pro 12 grays of a track row and a selected track row, which the classic mode uses.
 let CLASSIC_ROW = 0.341
 let CLASSIC_SELECTED_ROW = 0.45
@@ -35,6 +36,7 @@ let SWATCH_GAIN = 3.0
 
 // Stock Logic Pro grays of the track area, measured in a render of Logic Pro without the theme.
 let STOCK_ROW = 0.18
+let STOCK_SELECTED_ROW = 0.32
 let STOCK_SEPARATOR = 0.25
 let STOCK_BUTTON = 0.26
 let STOCK_SLIDER = 0.11
@@ -113,18 +115,26 @@ struct ThemeValues {
    let tint: Tint
    // The classic mode keeps Logic Pro dark, without the sliders and the tint.
    let isClassic: Bool
+   // Stock is Logic Pro without the theme, so the preview shows the stock grays.
+   let isStock: Bool
 
    var selectedRow: Color {
+      if isStock {
+         return Color(white: STOCK_SELECTED_ROW)
+      }
       return isClassic ? tinted(CLASSIC_SELECTED_ROW) : tinted(SELECTED_ROW_WHITE * surfaceMax)
    }
 
    func gray(_ stock: Double) -> Color {
+      if isStock {
+         return Color(white: stock)
+      }
       return tinted(isClassic ? mapClassicLevel(stock) : mapGrayLevel(stock, surfaceMax, gamma))
    }
 
    // A themed gray level with the tint, as the theme draws it.
    func tinted(_ white: Double) -> Color {
-      if isClassic {
+      if isClassic || isStock {
          return Color(white: white)
       }
       return Color(red: white * tint.red, green: white * tint.green, blue: white * tint.blue)
@@ -422,7 +432,7 @@ struct ContentView: View {
    @AppStorage("contrast") var contrast = TEXT_CONTRAST
    @AppStorage("tint") var storedTint = NO_TINT.stored
    @AppStorage("classic") var isClassic = false
-   /// When on, Logic Pro starts without the theme: exactly as Apple ships it.
+   /// True when the Stock row is selected: Logic Pro starts without the theme, as Apple ships it.
    @AppStorage("themeOff") var themeOff = false
    @State var status = LaunchStatus.ready
    @State var columns = NavigationSplitViewVisibility.all
@@ -444,13 +454,30 @@ struct ContentView: View {
    }
 
    var theme: ThemeValues {
-      return ThemeValues(surfaceMax: surfaceMax, gamma: gamma, tint: tint, isClassic: isClassic)
+      return ThemeValues(surfaceMax: surfaceMax, gamma: gamma, tint: tint, isClassic: isClassic,
+         isStock: themeOff)
+   }
+
+   var previewLabel: String {
+      if themeOff {
+         return "Preview of Logic Pro tracks without the theme"
+      }
+      if isClassic {
+         return "Preview of Logic Pro tracks with the Logic Pro 12 grays"
+      }
+      return "Preview of Logic Pro tracks at \(percent(surfaceMax)) lightness, tint \(tint.name)"
    }
 
    var selection: Binding<String?> {
       return Binding(
-         get: { return isClassic ? CLASSIC : presetName },
+         get: {
+            if themeOff {
+               return STOCK
+            }
+            return isClassic ? CLASSIC : presetName
+         },
          set: { (name) in
+            themeOff = name == STOCK
             isClassic = name == CLASSIC
             if let p = PRESETS.first(where: { (p) in return p.name == name }) {
                surfaceMax = p.surfaceMax
@@ -464,20 +491,14 @@ struct ContentView: View {
       let workspace = NSWorkspace.shared.notificationCenter
 
       NavigationSplitView(columnVisibility: $columns) {
-         VStack(spacing: 0) {
-            List(selection: selection) {
-               ForEach(PRESETS) { (p) in
-                  presetRow(name: p.name, summary: p.summary, surface: p.surfaceMax).tag(p.name)
-               }
-               presetRow(name: CUSTOM, summary: "Your own values", surface: surfaceMax).tag(CUSTOM)
-               presetRow(name: CLASSIC, summary: "Logic Pro 12 grays", surface: CLASSIC_ROW).tag(CLASSIC)
+         List(selection: selection) {
+            ForEach(PRESETS) { (p) in
+               presetRow(name: p.name, summary: p.summary, fill: theme.tinted(p.surfaceMax)).tag(p.name)
             }
-            Divider()
-            Toggle("No theme", isOn: $themeOff)
-               .toggleStyle(.switch)
-               .controlSize(.small)
-               .padding(10)
-               .accessibilityHint("Starts Logic Pro exactly as Apple ships it")
+            presetRow(name: CUSTOM, summary: "Your own values", fill: theme.tinted(surfaceMax)).tag(CUSTOM)
+            presetRow(name: CLASSIC, summary: "LP 12 grays", fill: theme.tinted(CLASSIC_ROW))
+               .tag(CLASSIC)
+            presetRow(name: STOCK, summary: "Apple default", fill: Color(white: STOCK_ROW)).tag(STOCK)
          }
          .navigationSplitViewColumnWidth(SIDEBAR_WIDTH)
          .toolbar(removing: .sidebarToggle)
@@ -485,9 +506,7 @@ struct ContentView: View {
          VStack(alignment: .leading, spacing: 18) {
             MockStrip(theme: theme)
                .accessibilityElement(children: .ignore)
-               .accessibilityLabel(isClassic
-                  ? "Preview of Logic Pro tracks with the Logic Pro 12 grays"
-                  : "Preview of Logic Pro tracks at \(percent(surfaceMax)) lightness, tint \(tint.name)")
+               .accessibilityLabel(previewLabel)
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 12) {
                sliderRow("Lightness", value: $surfaceMax, range: SURFACE_RANGE, low: "Dark", high: "Light",
                   shown: percent(surfaceMax))
@@ -497,7 +516,7 @@ struct ContentView: View {
                   shown: String(format: "%.2f", gamma))
                tintRow
             }
-            .disabled(isClassic)
+            .disabled(isClassic || themeOff)
             Spacer(minLength: 0)
             HStack(spacing: 8) {
                Image(systemName: status.symbol).foregroundStyle(status.tint)
@@ -574,10 +593,18 @@ struct ContentView: View {
       }
    }
 
-   func presetRow(name: String, summary: String, surface: Double) -> some View {
+   /**
+    * Draws one row of the sidebar list: a swatch, the name and a short summary.
+    *
+    * @param name String - the name of the row, which is also its tag
+    * @param summary String - the text under the name
+    * @param fill Color - the color of the swatch
+    * @return some View - the row
+    */
+   func presetRow(name: String, summary: String, fill: Color) -> some View {
       return HStack(spacing: 10) {
          RoundedRectangle(cornerRadius: 4)
-            .fill(theme.tinted(surface))
+            .fill(fill)
             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.separator))
             .frame(width: 18, height: 18)
          VStack(alignment: .leading, spacing: 1) {
@@ -665,7 +692,7 @@ struct ContentView: View {
     */
    func startLogic() {
       let open = Process()
-      // "Theme off" starts Logic Pro the plain way, without injecting the library. (20.11.2026)
+      // The Stock row starts Logic Pro the plain way, without injecting the library. (20.11.2026)
       var arguments = [ "-n", "-a", LOGIC_PATH ]
 
       if isLogicRunning() {

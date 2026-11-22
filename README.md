@@ -117,8 +117,9 @@ Logic Pro 12 and leaves the text grays as they are, so the slider does nothing t
 
 ## Starting Logic Pro without the theme
 
-The switch **No theme** under the preset list starts Logic Pro the plain way, without injecting
-the library, so it looks exactly as Apple ships it. Starting Logic Pro from the Dock does the
+The row **Stock** at the end of the preset list starts Logic Pro the plain way, without
+injecting the library, so it looks exactly as Apple ships it. The preview then shows the stock
+grays, and the sliders and the tint do not apply. Starting Logic Pro from the Dock does the
 same thing; the theme only comes in when you start it from this window or with
 `theme/launch.sh`.
 
