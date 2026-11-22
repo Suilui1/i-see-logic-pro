@@ -133,6 +133,50 @@ static void testContrastSetting(void) {
    check(isClose(textLimit(1, 0.75, 12), 0.0527), "the text limit at 12 is 0.0527");
 }
 
+@interface TestParent : NSObject
+- (int)value;
+@end
+
+@implementation TestParent
+- (int)value {
+   return 1;
+}
+@end
+
+@interface TestChild : TestParent
+@end
+
+@implementation TestChild
+@end
+
+static int hookValue(id self, SEL _cmd) {
+   return 2;
+}
+
+/**
+ * Checks that a hook on an inherited method leaves the parent class alone.
+ *
+ * class_getInstanceMethod finds inherited methods, so replacing the implementation would
+ * change the method of the parent for every subclass. The helper adds the method to the
+ * child first, and the child then runs the hook while the parent keeps its own.
+ */
+static void testInheritedHook(void) {
+   IMP before = class_getMethodImplementation([TestParent class], @selector(value));
+   TestParent *parent = [[TestParent alloc] init];
+   TestChild *child = [[TestChild alloc] init];
+
+   check([parent value] == 1, "the parent answers before the hook");
+   IMP original = swapInstanceMethod([TestChild class], @selector(value), (IMP)hookValue);
+
+   check([child value] == 2, "the child runs the hook");
+   check([parent value] == 1, "the parent still runs its own method");
+   check(class_getMethodImplementation([TestParent class], @selector(value)) == before,
+      "the parent implementation did not change");
+   check(original != NULL, "the hook got the inherited implementation to call");
+   check(((int (*)(id, SEL))original)(child, @selector(value)) == 1,
+      "the original still answers as the parent did");
+}
+
 int main(void) {
    @autoreleasepool {
       testGrayRule();
@@ -143,6 +187,7 @@ int main(void) {
       testColorList();
       testClassicRule();
       testContrastSetting();
+      testInheritedHook();
    }
    printf(failures ? "%d tests failed\n" : "All tests passed\n", failures);
    return failures ? 1 : 0;
