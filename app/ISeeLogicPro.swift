@@ -112,6 +112,8 @@ let MOCK_TRACKS = [
 struct ThemeValues {
    let surfaceMax: Double
    let gamma: Double
+   /// The contrast secondary text keeps. Stock and Classic ignore it, as the theme does.
+   let contrast: Double
    let tint: Tint
    // The classic mode keeps Logic Pro dark, without the sliders and the tint.
    let isClassic: Bool
@@ -123,6 +125,14 @@ struct ThemeValues {
          return Color(white: STOCK_SELECTED_ROW)
       }
       return isClassic ? tinted(CLASSIC_SELECTED_ROW) : tinted(SELECTED_ROW_WHITE * surfaceMax)
+   }
+
+   /// The color of text, which the contrast setting changes; gray leaves text alone.
+   func text(_ stock: Double) -> Color {
+      if isStock || isClassic {
+         return gray(stock)
+      }
+      return tinted(mapTextLevel(stock, surfaceMax, gamma, contrast))
    }
 
    func gray(_ stock: Double) -> Color {
@@ -337,7 +347,7 @@ struct MockStrip: View {
          ForEach(0..<BAR_COUNT, id: \.self) { (bar) in
             Text("\(bar * 4 + 1)")
                .font(.system(size: 9).monospacedDigit())
-               .foregroundStyle(theme.gray(STOCK_LETTER))
+               .foregroundStyle(theme.text(STOCK_LETTER))
                .padding(.leading, 3)
                .frame(width: BAR_WIDTH, alignment: .leading)
          }
@@ -380,7 +390,7 @@ struct MockStrip: View {
          .frame(width: 76, alignment: .leading)
          Text(track.name)
             .font(.system(size: 11))
-            .foregroundStyle(theme.gray(STOCK_TEXT))
+            .foregroundStyle(theme.text(STOCK_TEXT))
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
          volume(track.volume)
@@ -454,8 +464,8 @@ struct ContentView: View {
    }
 
    var theme: ThemeValues {
-      return ThemeValues(surfaceMax: surfaceMax, gamma: gamma, tint: tint, isClassic: isClassic,
-         isStock: themeOff)
+      return ThemeValues(surfaceMax: surfaceMax, gamma: gamma, contrast: contrast,
+                         tint: tint, isClassic: isClassic, isStock: themeOff)
    }
 
    var previewLabel: String {
