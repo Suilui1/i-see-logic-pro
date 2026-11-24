@@ -15,6 +15,10 @@ This file lists the changes in each release of I See Logic Pro. The newest relea
 
 - A Logic Pro update can remove a class or a method that the theme changes. The theme then skips that change and writes its name to the system log. If the Logic Pro build is not the tested one, the theme also writes a message. Set `LP_DEBUG=1` to write a full report at each launch.
 
+### Fixed
+
+- The app now finds Logic Pro in the Applications folder by its identity, not by its file name. Before, a special character in the name of Logic Pro gave an error. An example of such a character is a no-break space. The error was "Logic Pro is not in the Applications folder." The theme also works on a copy with such a name. If the Applications folder holds more than one Logic Pro, the app starts the tested build, or else the newest build.
+
 ## 1.2.0 (2026-11-20)
 
 ### Added
