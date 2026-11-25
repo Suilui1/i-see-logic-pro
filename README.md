@@ -68,6 +68,8 @@ The build writes `theme/light-theme.dylib` and copies it into `app/I See Logic P
 
 The app starts Logic Pro with the theme, and then it quits. The theme loads only at launch, so a change takes effect the next time that you start Logic Pro.
 
+If you select Start Logic Pro automatically, the app counts down 2 seconds each time that you open it. Then it starts Logic Pro with your last settings. To change the settings first, click Cancel or press Esc. If the status line shows a warning, the app does not count down.
+
 The first launch with the theme takes about one second longer. The theme then reads the color names from your copy of Logic Pro and keeps them in a cache. The next launches use the cache.
 
 ![The launcher app with the Soft preset and the Cool tint](docs/launcher.png)
@@ -117,11 +119,10 @@ Logic Pro 12 and leaves the text grays as they are, so the slider does nothing t
 
 ## Starting Logic Pro without the theme
 
-The row **Stock** at the end of the preset list starts Logic Pro the plain way, without
-injecting the library, so it looks exactly as Apple ships it. The preview then shows the stock
-grays, and the sliders and the tint do not apply. Starting Logic Pro from the Dock does the
-same thing; the theme only comes in when you start it from this window or with
-`theme/launch.sh`.
+The row Stock at the end of the preset list starts Logic Pro without the theme library. Logic
+Pro then looks as Apple ships it. The preview shows the stock grays, and the sliders and the
+tint do not apply. A start from the Dock also gives the stock look. To get the theme, start
+Logic Pro from this app or with `theme/launch.sh`.
 
 ## Checking for updates
 
