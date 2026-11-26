@@ -27,9 +27,10 @@ let RULER_HEIGHT = 20.0
 let BAR_WIDTH = 46.0
 let BAR_COUNT = 12
 let STRIP_FOOTER = 14.0
-// A German end label such as "Kraeftig" is wider than 30 points, so the frame is a minimum
-// that grows with its text. The value comes from the longest English label, "Crisp".
-let END_LABEL_WIDTH = 30.0
+// The end labels of the sliders sit in frames of this width. The longest English label is
+// "Crisp" at 25 points, the longest German one is "Dunkel" at 33 points (measured in the
+// caption font), so 36 points fits both and keeps the sliders aligned from row to row.
+let END_LABEL_WIDTH = 36.0
 let SWATCH_SIZE = 18.0
 let SWATCH_RING = 3.0
 // The swatches show each tint this many times stronger than the theme, so that the hues are
@@ -762,8 +763,7 @@ struct ContentView: View {
          // The end labels are plain text, because macOS draws the value labels of a Slider dimmed.
          HStack(spacing: 8) {
             Text(low).font(.caption).foregroundStyle(.secondary)
-               .frame(minWidth: END_LABEL_WIDTH, alignment: .trailing)
-               .fixedSize(horizontal: true, vertical: false)
+               .frame(width: END_LABEL_WIDTH, alignment: .trailing)
                .accessibilityHidden(true)
             Slider(value: value, in: range, step: step) {
                Text(label)
@@ -771,8 +771,7 @@ struct ContentView: View {
             .labelsHidden()
             .accessibilityValue(shown)
             Text(high).font(.caption).foregroundStyle(.secondary)
-               .frame(minWidth: END_LABEL_WIDTH, alignment: .leading)
-               .fixedSize(horizontal: true, vertical: false)
+               .frame(width: END_LABEL_WIDTH, alignment: .leading)
                .accessibilityHidden(true)
          }
          Text(shown).monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
@@ -820,7 +819,7 @@ struct ContentView: View {
          .contentShape(Circle())
       }
       .buttonStyle(.plain)
-      .help(t.name)
+      .help(localizedName(TINT_KEY_PREFIX, t.name))
       .accessibilityLabel(localizedName(TINT_KEY_PREFIX, t.name))
       .accessibilityAddTraits(isSelected ? .isSelected : [])
    }

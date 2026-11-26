@@ -7,6 +7,12 @@ This file lists the changes in each release of I See Logic Pro. The newest relea
 ### Added
 
 - A German translation of the app. macOS now shows the window, the buttons, the help text and the status line in German when German is the system language. The other languages stay English.
+- You can install the app with Homebrew: `brew install --cask karlingen/tap/i-see-logic-pro`. Homebrew removes the download flag, so macOS opens the app with no warning.
+
+### Fixed
+
+- In Classic mode, the title bar and the control bar at the top of the window are gray, not black.
+- In Classic mode, the line below the control bar and the lines between the panes are dark gray, not black.
 
 ## 1.4.0 (2026-11-25)
 
