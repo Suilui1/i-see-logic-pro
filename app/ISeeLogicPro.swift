@@ -94,20 +94,15 @@ func localized(_ text: String) -> String {
 
 /**
  * Returns the translated label of a stored name, or the name itself when the language has
- * no translation. The keys of presets and tints carry a prefix, so a plain lookup would
- * show "preset.Light" to an English user.
+ * no translation. The keys of presets and tints carry a prefix, so the name goes in as the
+ * value: NSLocalizedString returns the value when the key is missing.
  *
  * @param prefix String - the prefix that marks the kind of name
  * @param name String - the English name, which is also the stored value
  * @return String - the translated label or the English name
  */
 func localizedName(_ prefix: String, _ name: String) -> String {
-   let key = prefix + name
-   let text = NSLocalizedString(key, comment: "")
-   if text == key {
-      return name
-   }
-   return text
+   return NSLocalizedString(prefix + name, value: name, comment: "")
 }
 
 // Preset names and tint names are stored values, so they stay English. Only the label
