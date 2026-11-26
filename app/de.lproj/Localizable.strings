@@ -24,10 +24,10 @@
 
 /* Summaries of the rows in the sidebar */
 "Full brightness" = "Volle Helligkeit";
-"Dimmer grays" = "Gedämpfte Grautöne";
+"Dimmer grays" = "Gedämpft";
 "Middle gray" = "Mittleres Grau";
 "Your own values" = "Eigene Werte";
-"LP 12 grays" = "Grautöne von LP 12";
+"LP 12 grays" = "Grau wie LP 12";
 "Apple default" = "So wie von Apple";
 
 /* Status line */

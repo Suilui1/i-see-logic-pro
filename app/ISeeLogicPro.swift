@@ -91,6 +91,24 @@ func localized(_ text: String) -> String {
    return NSLocalizedString(text, comment: "")
 }
 
+/**
+ * Returns the translated label of a stored name, or the name itself when the language has
+ * no translation. The keys of presets and tints carry a prefix, so a plain lookup would
+ * show "preset.Light" to an English user.
+ *
+ * @param prefix String - the prefix that marks the kind of name
+ * @param name String - the English name, which is also the stored value
+ * @return String - the translated label or the English name
+ */
+func localizedName(_ prefix: String, _ name: String) -> String {
+   let key = prefix + name
+   let text = NSLocalizedString(key, comment: "")
+   if text == key {
+      return name
+   }
+   return text
+}
+
 // Preset names and tint names are stored values, so they stay English. Only the label
 // is translated, and a prefix keeps these keys apart from the labels of the sliders.
 let PRESET_KEY_PREFIX = "preset."
@@ -550,7 +568,7 @@ struct ContentView: View {
          return localized("Preview of Logic Pro tracks with the Logic Pro 12 grays")
       }
       return String(format: localized("Preview of Logic Pro tracks at %@ lightness, tint %@"),
-         percent(surfaceMax), localized(TINT_KEY_PREFIX + tint.name))
+         percent(surfaceMax), localizedName(TINT_KEY_PREFIX, tint.name))
    }
 
    var selection: Binding<String?> {
@@ -730,7 +748,7 @@ struct ContentView: View {
             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.separator))
             .frame(width: 18, height: 18)
          VStack(alignment: .leading, spacing: 1) {
-            Text(localized(PRESET_KEY_PREFIX + name))
+            Text(localizedName(PRESET_KEY_PREFIX, name))
             Text(localized(summary)).font(.caption).foregroundStyle(.secondary)
          }
       }
@@ -771,7 +789,8 @@ struct ContentView: View {
          }
          .accessibilityElement(children: .contain)
          .accessibilityLabel("Tint")
-         Text(tint.name).foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
+         Text(localizedName(TINT_KEY_PREFIX, tint.name)).foregroundStyle(.secondary)
+            .frame(minWidth: 40, alignment: .trailing)
       }
    }
 
@@ -802,7 +821,7 @@ struct ContentView: View {
       }
       .buttonStyle(.plain)
       .help(t.name)
-      .accessibilityLabel(localized(TINT_KEY_PREFIX + t.name))
+      .accessibilityLabel(localizedName(TINT_KEY_PREFIX, t.name))
       .accessibilityAddTraits(isSelected ? .isSelected : [])
    }
 
@@ -815,13 +834,13 @@ struct ContentView: View {
     */
    func countdownView(seconds: Int) -> some View {
       let name = selection.wrappedValue ?? CUSTOM
-      var look = String(format: localized("Theme: %@"), localized(PRESET_KEY_PREFIX + name))
+      var look = String(format: localized("Theme: %@"), localizedName(PRESET_KEY_PREFIX, name))
 
       if themeOff {
          look = localized("Without the theme")
       } else if !isClassic && tint.stored != NO_TINT.stored {
          // Classic does not use the tint, so only the light theme names it.
-         look += String(format: localized(", tint %@"), localized(TINT_KEY_PREFIX + tint.name))
+         look += String(format: localized(", tint %@"), localizedName(TINT_KEY_PREFIX, tint.name))
       }
       return VStack(spacing: 12) {
          Text("Starting Logic Pro in").font(.title2)
