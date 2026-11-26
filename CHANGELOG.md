@@ -2,6 +2,12 @@
 
 This file lists the changes in each release of I See Logic Pro. The newest release is first.
 
+## Unreleased
+
+### Added
+
+- A German translation of the app. macOS now shows the window, the buttons, the help text and the status line in German when German is the system language. The other languages stay English.
+
 ## 1.4.0 (2026-11-25)
 
 ### Added
