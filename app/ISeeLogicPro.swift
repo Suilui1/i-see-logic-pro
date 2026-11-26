@@ -27,6 +27,8 @@ let RULER_HEIGHT = 20.0
 let BAR_WIDTH = 46.0
 let BAR_COUNT = 12
 let STRIP_FOOTER = 14.0
+// A German end label such as "Kraeftig" is wider than 30 points, so the frame is a minimum
+// that grows with its text. The value comes from the longest English label, "Crisp".
 let END_LABEL_WIDTH = 30.0
 let SWATCH_SIZE = 18.0
 let SWATCH_RING = 3.0
@@ -80,7 +82,7 @@ struct Tint: Identifiable {
  * Returns the translation of an English text, or the text itself when no translation exists.
  *
  * The English text is the key, so the strings file needs no invented identifiers. SwiftUI
- * localizes its own literals; this function serves the texts that are built in code.
+ * localizes its own literals. This function serves the texts that are built in code.
  *
  * @param text String - the English text, which is also the key in Localizable.strings
  * @return String - the translated text
@@ -88,6 +90,11 @@ struct Tint: Identifiable {
 func localized(_ text: String) -> String {
    return NSLocalizedString(text, comment: "")
 }
+
+// Preset names and tint names are stored values, so they stay English. Only the label
+// is translated, and a prefix keeps these keys apart from the labels of the sliders.
+let PRESET_KEY_PREFIX = "preset."
+let TINT_KEY_PREFIX = "tint."
 
 let NO_TINT = Tint(name: "None", red: 1, green: 1, blue: 1)
 let TINTS = [
@@ -514,6 +521,7 @@ struct ContentView: View {
    @State var columns = NavigationSplitViewVisibility.all
    /// The answer of the update check, shown under the status line.
    @State var updateText = ""
+   @State var isChecking = false
    /// Where the newest release can be downloaded, once one was found.
    @State var updatePage: String?
 
@@ -542,7 +550,7 @@ struct ContentView: View {
          return localized("Preview of Logic Pro tracks with the Logic Pro 12 grays")
       }
       return String(format: localized("Preview of Logic Pro tracks at %@ lightness, tint %@"),
-         percent(surfaceMax), tint.name)
+         percent(surfaceMax), localized(TINT_KEY_PREFIX + tint.name))
    }
 
    var selection: Binding<String?> {
@@ -628,10 +636,10 @@ struct ContentView: View {
                   checkForUpdates()
                }
                .controlSize(.regular)
-               .disabled(updateText == "Checking ...")
+               .disabled(isChecking)
                Spacer()
                Toggle("Start Logic Pro automatically", isOn: $isAutoStart)
-                  .help(String(format: localized("Each time that this app opens, it counts down %d seconds "
+                  .help(String(format: localized("Each time that this app opens, it counts down %ld seconds "
                      + "and starts Logic Pro. Click Cancel to change the settings first."), AUTO_START_SECONDS))
             }
          }
@@ -684,6 +692,7 @@ struct ContentView: View {
    @MainActor func checkForUpdates() {
       updatePage = nil
       updateText = localized("Checking ...")
+      isChecking = true
       Task {
          do {
             let release = try await UpdateCheck.latest()
@@ -702,6 +711,7 @@ struct ContentView: View {
             updateText = localized("No answer from GitHub")
             updatePage = nil
          }
+         isChecking = false
       }
    }
 
@@ -720,7 +730,7 @@ struct ContentView: View {
             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.separator))
             .frame(width: 18, height: 18)
          VStack(alignment: .leading, spacing: 1) {
-            Text(name)
+            Text(localized(PRESET_KEY_PREFIX + name))
             Text(localized(summary)).font(.caption).foregroundStyle(.secondary)
          }
       }
@@ -734,7 +744,8 @@ struct ContentView: View {
          // The end labels are plain text, because macOS draws the value labels of a Slider dimmed.
          HStack(spacing: 8) {
             Text(low).font(.caption).foregroundStyle(.secondary)
-               .frame(width: END_LABEL_WIDTH, alignment: .trailing)
+               .frame(minWidth: END_LABEL_WIDTH, alignment: .trailing)
+               .fixedSize(horizontal: true, vertical: false)
                .accessibilityHidden(true)
             Slider(value: value, in: range, step: step) {
                Text(label)
@@ -742,7 +753,8 @@ struct ContentView: View {
             .labelsHidden()
             .accessibilityValue(shown)
             Text(high).font(.caption).foregroundStyle(.secondary)
-               .frame(width: END_LABEL_WIDTH, alignment: .leading)
+               .frame(minWidth: END_LABEL_WIDTH, alignment: .leading)
+               .fixedSize(horizontal: true, vertical: false)
                .accessibilityHidden(true)
          }
          Text(shown).monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
@@ -790,7 +802,7 @@ struct ContentView: View {
       }
       .buttonStyle(.plain)
       .help(t.name)
-      .accessibilityLabel(t.name)
+      .accessibilityLabel(localized(TINT_KEY_PREFIX + t.name))
       .accessibilityAddTraits(isSelected ? .isSelected : [])
    }
 
@@ -802,13 +814,14 @@ struct ContentView: View {
     * @return some View - the countdown screen
     */
    func countdownView(seconds: Int) -> some View {
-      var look = String(format: localized("Theme: %@"), selection.wrappedValue ?? CUSTOM)
+      let name = selection.wrappedValue ?? CUSTOM
+      var look = String(format: localized("Theme: %@"), localized(PRESET_KEY_PREFIX + name))
 
       if themeOff {
          look = localized("Without the theme")
       } else if !isClassic && tint.stored != NO_TINT.stored {
          // Classic does not use the tint, so only the light theme names it.
-         look += String(format: localized(", tint %@"), tint.name)
+         look += String(format: localized(", tint %@"), localized(TINT_KEY_PREFIX + tint.name))
       }
       return VStack(spacing: 12) {
          Text("Starting Logic Pro in").font(.title2)
